@@ -1,0 +1,33 @@
+# Secrets & credentials
+.credentials.json
+*.secret
+*.key
+
+# Machine-specific state
+history.jsonl
+debug/
+cache/
+file-history/
+paste-cache/
+plans/
+backups/
+downloads/
+ide/
+mcp-needs-auth-cache.json
+
+# Plugin marketplace repos (large, fetched on install)
+plugins/marketplaces/
+plugins/cache/
+plugins/blocklist.json
+plugins/install-counts-cache.json
+plugins/data/
+
+# Homunculus (large, 23MB)
+homunculus/
+
+# Project-specific memories (per-machine)
+projects/
+
+# OS junk
+.DS_Store
+Thumbs.db
