@@ -15,8 +15,8 @@ cd claude-skills
 | Component | Count | Description |
 |-----------|-------|-------------|
 | Agents | 29 | Specialized subagents (planner, architect, tdd-guide, code-reviewer, security-reviewer, etc.) |
-| Commands | 61 | Slash commands (/plan, /tdd, /ship, /qa, /e2e, /rust-build, etc.) |
-| Skills | 79 | Deep reference material (coding-standards, django-patterns, rust-testing, etc.) |
+| Commands | 62 | Slash commands (/plan, /tdd, /ship, /qa, /e2e, /flowlyte, /rust-build, etc.) |
+| Skills | 80 | Deep reference material (coding-standards, django-patterns, flowlyte, rust-testing, etc.) |
 | Rules | 14 sets | Common + 13 language-specific rule sets (TypeScript, Python, Go, Rust, etc.) |
 | Hooks | Full | Pre/PostToolUse, SessionStart/End, Stop, PreCompact lifecycle hooks |
 | MCP Servers | 24 | GitHub, Supabase, Vercel, Railway, Cloudflare, Playwright, Context7, etc. |
@@ -64,8 +64,8 @@ claude-skills/
 ├── uninstall.sh            # Restore from backup
 ├── claude-config/          # All configuration files
 │   ├── agents/             # 29 agent definitions
-│   ├── commands/           # 61 slash commands
-│   ├── skills/             # 79 skills
+│   ├── commands/           # 62 slash commands
+│   ├── skills/             # 80 skills
 │   ├── rules/              # 14 rule sets
 │   │   ├── common/         # Language-agnostic rules
 │   │   ├── typescript/     # Language-specific overrides
