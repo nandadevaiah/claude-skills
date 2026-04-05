@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claude + G-Stack + ECC + Agent OS Skills Reference</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card-bg: #1e293b;
+            --text: #f8fafc;
+            --accent: #38bdf8;
+            --secondary: #94a3b8;
+            --code-bg: #000000;
+            --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            --integrated: #a78bfa;
+            --gstack-color: #38bdf8;
+            --ecc-color: #34d399;
+            --agentos-color: #f59e0b;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+            padding: 2rem;
+        }
+
+        .container { max-width: 1400px; margin: 0 auto; }
+
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+            border-bottom: 1px solid var(--secondary);
+            padding-bottom: 2rem;
+        }
+
+        h1 { font-size: 2.5rem; margin-bottom: 0.5rem; color: var(--accent); }
+        .subtitle { color: var(--secondary); font-size: 1.1rem; }
+        .stats { color: var(--secondary); font-size: 0.9rem; margin-top: 0.5rem; }
+        .stats span { color: var(--accent); font-weight: bold; }
+
+        .search-container {
+            margin: 2rem 0;
+            display: flex;
+            justify-content: center;
+        }
+
+        #search {
+            width: 100%;
+            max-width: 600px;
+            padding: 1rem 1.5rem;
+            border-radius: 9999px;
+            border: 1px solid var(--secondary);
+            background: var(--card-bg);
+            color: var(--text);
+            font-size: 1.1rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        #search:focus { border-color: var(--accent); }
+
+        .filters {
+            display: flex;
+            gap: 0.75rem;
+            justify-content: center;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .filter-btn {
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            background: var(--card-bg);
+            border: 1px solid var(--secondary);
+            color: var(--text);
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+        }
+
+        .filter-btn.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: var(--bg);
+            font-weight: bold;
+        }
+
+        .filter-btn.active[data-filter="integrated"] {
+            background: var(--integrated);
+            border-color: var(--integrated);
+        }
+
+        .filter-btn.active[data-filter="ecc"] {
+            background: var(--ecc-color);
+            border-color: var(--ecc-color);
+        }
+
+        .filter-btn.active[data-filter="agentos"] {
+            background: var(--agentos-color);
+            border-color: var(--agentos-color);
+        }
+
+        .section-title {
+            font-size: 1.4rem;
+            color: var(--accent);
+            margin: 2.5rem 0 1.5rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #334155;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: var(--shadow);
+            border: 1px solid transparent;
+            transition: transform 0.2s, border-color 0.2s;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            border-color: var(--accent);
+        }
+
+        .card[data-type="integrated"]:hover { border-color: var(--integrated); }
+        .card[data-type="ecc"]:hover { border-color: var(--ecc-color); }
+        .card[data-type="agentos"]:hover { border-color: var(--agentos-color); }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .skill-name {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: var(--accent);
+        }
+
+        .card[data-type="integrated"] .skill-name { color: var(--integrated); }
+        .card[data-type="ecc"] .skill-name { color: var(--ecc-color); }
+        .card[data-type="agentos"] .skill-name { color: var(--agentos-color); }
+
+        .badge {
+            font-size: 0.7rem;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            text-transform: uppercase;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+        }
+
+        .badge-gstack { background: rgba(56, 189, 248, 0.15); color: var(--gstack-color); }
+        .badge-ecc { background: rgba(52, 211, 153, 0.15); color: var(--ecc-color); }
+        .badge-integrated { background: rgba(167, 139, 250, 0.15); color: var(--integrated); }
+        .badge-agentos { background: rgba(245, 158, 11, 0.15); color: var(--agentos-color); }
+
+        .description {
+            font-size: 0.9rem;
+            color: var(--secondary);
+            margin-bottom: 1rem;
+            flex-grow: 1;
+        }
+
+        .prompt-section { margin-top: auto; }
+        .prompt-label {
+            font-size: 0.75rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            color: var(--secondary);
+            margin-bottom: 0.4rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .copy-btn {
+            font-size: 0.7rem;
+            background: none;
+            border: 1px solid var(--secondary);
+            color: var(--secondary);
+            padding: 2px 6px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .copy-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+        pre {
+            background: var(--code-bg);
+            padding: 0.75rem;
+            border-radius: 6px;
+            font-size: 0.82rem;
+            overflow-x: auto;
+            border: 1px solid #334155;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        footer {
+            margin-top: 5rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--secondary);
+            text-align: center;
+            color: var(--secondary);
+            font-size: 0.9rem;
+        }
+
+        .mindset-box {
+            background: rgba(56, 189, 248, 0.05);
+            border: 1px solid var(--accent);
+            padding: 1.5rem;
+            border-radius: 12px;
+            margin-bottom: 3rem;
+        }
+
+        .mindset-box h2 { color: var(--accent); font-size: 1.5rem; margin-bottom: 1rem; text-align: center; }
+        .mindset-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem; }
+        .mindset-item b { display: block; color: var(--text); margin-bottom: 0.25rem; }
+        .mindset-item { font-size: 0.9rem; color: var(--secondary); }
+
+        .workflow-box {
+            background: rgba(167, 139, 250, 0.05);
+            border: 1px solid var(--integrated);
+            padding: 1.5rem;
+            border-radius: 12px;
+            margin-bottom: 3rem;
+        }
+
+        .workflow-box h2 { color: var(--integrated); font-size: 1.3rem; margin-bottom: 1rem; text-align: center; }
+
+        .workflow-steps {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .workflow-step {
+            background: var(--card-bg);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            color: var(--text);
+            border: 1px solid #334155;
+        }
+
+        .workflow-arrow { color: var(--integrated); font-size: 1.2rem; }
+
+        .counter {
+            display: inline-block;
+            background: var(--card-bg);
+            padding: 0.1rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            margin-left: 0.25rem;
+        }
+
+        @media (max-width: 600px) {
+            body { padding: 1rem; }
+            .grid { grid-template-columns: 1fr; }
+            .workflow-steps { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Claude + G-Stack + ECC + Agent OS Skills</h1>
+            <p class="subtitle">Unified Skills Reference for AI-Powered Engineering</p>
+            <p class="stats"><span id="total-count">0</span> skills across four layers: <span>G-Stack</span> (product workflow) + <span>ECC</span> (code patterns) + <span>Integrated</span> (best of both) + <span style="color: var(--agentos-color)">Agent OS</span> (standards &amp; specs)</p>
+        </header>
+
+        <div class="mindset-box">
+            <h2>Operating Principles</h2>
+            <div class="mindset-grid">
+                <div class="mindset-item"><b>Boil the Lake</b>AI makes completeness near-free. Don't skip edge cases, tests, or the last 5%.</div>
+                <div class="mindset-item"><b>Concreteness</b>Name the file, the function, the line. Use real numbers and specific commands.</div>
+                <div class="mindset-item"><b>User Sovereignty</b>You are the driver. AI recommendations are just that. You decide.</div>
+                <div class="mindset-item"><b>Search First</b>GitHub, docs, registries. Proven solutions over hand-rolled code.</div>
+                <div class="mindset-item"><b>Iron Law</b>No fixes without root cause. No shipping without tests. No guessing.</div>
+                <div class="mindset-item"><b>Agent Delegation</b>Use specialized agents (code-reviewer, security-reviewer, tdd-guide) proactively.</div>
+            </div>
+        </div>
+
+        <div class="workflow-box">
+            <h2>The Full Workflow Pipeline</h2>
+            <div class="workflow-steps">
+                <div class="workflow-step">/office-hours</div>
+                <span class="workflow-arrow">&#8594;</span>
+                <div class="workflow-step">/autoplan</div>
+                <span class="workflow-arrow">&#8594;</span>
+                <div class="workflow-step">/plan</div>
+                <span class="workflow-arrow">&#8594;</span>
+                <div class="workflow-step">/tdd</div>
+                <span class="workflow-arrow">&#8594;</span>
+                <div class="workflow-step">/code-review</div>
+                <span class="workflow-arrow">&#8594;</span>
+                <div class="workflow-step">/qa</div>
+                <span class="workflow-arrow">&#8594;</span>
+                <div class="workflow-step">/ship</div>
+                <span class="workflow-arrow">&#8594;</span>
+                <div class="workflow-step">/land-and-deploy</div>
+                <span class="workflow-arrow">&#8594;</span>
+                <div class="workflow-step">/canary</div>
+            </div>
+        </div>
+
+        <div class="workflow-box" style="border-color: var(--agentos-color);">
+            <h2 style="color: var(--agentos-color);">Agent OS Standards Pipeline</h2>
+            <div class="workflow-steps">
+                <div class="workflow-step">/agent-os/plan-product</div>
+                <span class="workflow-arrow" style="color: var(--agentos-color);">&#8594;</span>
+                <div class="workflow-step">/agent-os/discover-standards</div>
+                <span class="workflow-arrow" style="color: var(--agentos-color);">&#8594;</span>
+                <div class="workflow-step">/agent-os/index-standards</div>
+                <span class="workflow-arrow" style="color: var(--agentos-color);">&#8594;</span>
+                <div class="workflow-step">/agent-os/inject-standards</div>
+                <span class="workflow-arrow" style="color: var(--agentos-color);">&#8594;</span>
+                <div class="workflow-step">/agent-os/shape-spec</div>
+            </div>
+        </div>
+
+        <div class="search-container">
+            <input type="text" id="search" placeholder="Search skills (e.g. /ship, debug, python, deploy)...">
+        </div>
+
+        <div class="filters">
+            <button class="filter-btn active" data-filter="all">All</button>
+            <button class="filter-btn" data-filter="integrated">Claude+GStack+ECC</button>
+            <button class="filter-btn" data-filter="gstack">G-Stack</button>
+            <button class="filter-btn" data-filter="ecc">ECC</button>
+            <button class="filter-btn" data-filter="agentos">Agent OS</button>
+            <button class="filter-btn" data-filter="strategy">Strategy</button>
+            <button class="filter-btn" data-filter="code">Code</button>
+            <button class="filter-btn" data-filter="qa">QA</button>
+            <button class="filter-btn" data-filter="deploy">Deploy</button>
+            <button class="filter-btn" data-filter="safety">Safety</button>
+            <button class="filter-btn" data-filter="perf">Performance</button>
+        </div>
+
+        <div class="grid" id="skills-grid"></div>
+
+        <footer>
+            <p>&copy; 2026 Claude + G-Stack + ECC + Agent OS — The unified AI engineering stack.</p>
+            <p style="margin-top: 8px;">83 skills. 28 agents. 11 language rule sets. Two workflows. One stack.</p>
+        </footer>
+    </div>
+
+    <script>
+        const skills = [
+
+            // ═══════════════════════════════════════════
+            // INTEGRATED: Claude + G-Stack + ECC (new)
+            // ═══════════════════════════════════════════
+
+            // --- Strategy & Planning ---
+            {
+                name: "/office-hours",
+                type: "integrated",
+                cat: "strategy",
+                desc: "Product diagnostic and brainstorming. Startup mode (6 forcing questions, anti-sycophancy) or Builder mode (design thinking). Outputs a design doc, not code.",
+                prompt: "/office-hours\nI want to build a real-time collaboration feature for our dashboard. Challenge my premise and help me find the narrowest wedge."
+            },
+            {
+                name: "/plan-ceo-review",
+                type: "integrated",
+                cat: "strategy",
+                desc: "CEO-level strategic review. 10-star framework, 5 strategic questions. Four scope modes: Expand, Selective, Hold, or Reduce.",
+                prompt: "/plan-ceo-review\nReview DESIGN.md. Are we solving the right problem? What will look foolish in 6 months?"
+            },
+            {
+                name: "/autoplan",
+                type: "integrated",
+                cat: "strategy",
+                desc: "Auto-review pipeline: CEO review → Design review → Eng review. Auto-decides routine issues via 6 principles, surfaces only taste decisions for your approval.",
+                prompt: "/autoplan\nReview the plan in DESIGN.md for the billing system migration. Handle the gate-keeping automatically."
+            },
+
+            // --- Investigation & Debugging ---
+            {
+                name: "/investigate",
+                type: "integrated",
+                cat: "code",
+                desc: "Systematic 5-phase root cause debugging. Iron Law: no fixes without root cause. Scope-locks edits via /freeze. 3-strike escalation rule.",
+                prompt: "/investigate\nThe /api/payments endpoint returns 500 intermittently. Don't fix yet. Find the root cause first."
+            },
+
+            // --- QA & Testing ---
+            {
+                name: "/qa",
+                type: "integrated",
+                cat: "qa",
+                desc: "Full QA with Playwright: find bugs, fix them with atomic commits, re-verify. Three tiers: Quick (critical), Standard (+ medium), Exhaustive (+ cosmetic).",
+                prompt: "/qa http://localhost:3000 --exhaustive\nFocus on the checkout flow. Fix anything broken and commit each fix atomically."
+            },
+            {
+                name: "/qa-only",
+                type: "integrated",
+                cat: "qa",
+                desc: "Report-only QA. Same Playwright testing methodology as /qa but produces a structured bug report without code changes.",
+                prompt: "/qa-only https://staging.myapp.com\nAudit the dashboard pages. Produce a prioritized bug report for the team."
+            },
+            {
+                name: "/benchmark",
+                type: "integrated",
+                cat: "perf",
+                desc: "Performance regression detection. Core Web Vitals, bundle sizes, request counts. Baselines, before/after comparison, trend tracking, budget grading.",
+                prompt: "/benchmark http://localhost:3000 --baseline\nCapture performance baselines before we start the refactor."
+            },
+
+            // --- Ship & Deploy ---
+            {
+                name: "/ship",
+                type: "integrated",
+                cat: "deploy",
+                desc: "Automated ship workflow: merge base, run tests, code-reviewer + security-reviewer agents, CHANGELOG, push, create PR. One command, PR URL out.",
+                prompt: "/ship\nAll tests pass. Review the diff, update CHANGELOG, and open a PR against main."
+            },
+            {
+                name: "/land-and-deploy",
+                type: "integrated",
+                cat: "deploy",
+                desc: "Merge PR, wait for CI/deploy, verify production health. One command from approval to verified production.",
+                prompt: "/land-and-deploy\nMerge PR #42, wait for Vercel deploy, and verify the health endpoint responds."
+            },
+            {
+                name: "/canary",
+                type: "integrated",
+                cat: "deploy",
+                desc: "Post-deploy monitoring loop. HTTP health, response time, console errors, visual diffs. Alerts on anomalies. Configurable duration and interval.",
+                prompt: "/canary https://myapp.com --duration 15m --pages /,/dashboard,/api/health\nWatch for regressions after today's deploy."
+            },
+            {
+                name: "/setup-deploy",
+                type: "integrated",
+                cat: "deploy",
+                desc: "One-time deploy configurator. Auto-detects platform (Vercel, Fly.io, Render, etc.), production URL, health checks. Saves config to CLAUDE.md.",
+                prompt: "/setup-deploy\nDetect our deployment setup and save the config so /land-and-deploy and /canary work."
+            },
+
+            // --- Safety Guardrails ---
+            {
+                name: "/careful",
+                type: "integrated",
+                cat: "safety",
+                desc: "Destructive command guardrails. Warns before rm -rf, DROP TABLE, force-push, kubectl delete, terraform destroy. Safe exceptions for build artifacts.",
+                prompt: "/careful\nActivate safety mode. I'm debugging a production issue and don't want accidental damage."
+            },
+            {
+                name: "/freeze",
+                type: "integrated",
+                cat: "safety",
+                desc: "Restrict Edit/Write to a single directory. Prevents accidental changes to unrelated code during debugging or scoped work.",
+                prompt: "/freeze\nLock edits to src/auth/ only. I'm fixing the token refresh bug and don't want scope creep."
+            },
+            {
+                name: "/guard",
+                type: "integrated",
+                cat: "safety",
+                desc: "Full safety mode: combines /careful (destructive warnings) + /freeze (edit boundary). Maximum protection for production debugging.",
+                prompt: "/guard\nFull safety mode. Lock edits to src/payments/ and warn me before any destructive commands."
+            },
+            {
+                name: "/unfreeze",
+                type: "integrated",
+                cat: "safety",
+                desc: "Clear the freeze boundary set by /freeze or /guard. Allows edits everywhere again without ending the session.",
+                prompt: "/unfreeze\nDebug session complete. Remove the edit restriction so I can work on other files."
+            },
+
+            // ═══════════════════════════════════════════
+            // G-STACK ORIGINALS (not yet ported)
+            // ═══════════════════════════════════════════
+
+            {
+                name: "/plan-eng-review",
+                type: "gstack",
+                cat: "strategy",
+                desc: "Engineering manager review. Locks architecture, data flow, ASCII dependency graphs, edge cases, and test coverage plan.",
+                prompt: "/plan-eng-review\nReview the architecture for the WebSocket notification system. Build a dependency graph and test plan."
+            },
+            {
+                name: "/plan-design-review",
+                type: "gstack",
+                cat: "strategy",
+                desc: "Interactive design review. Rates each design dimension 0-10, explains what 10 looks like, and fixes the plan interactively.",
+                prompt: "/plan-design-review\nAudit the UX for the new settings page. Focus on information hierarchy and missing states (loading, empty, error)."
+            },
+            {
+                name: "/review",
+                type: "gstack",
+                cat: "code",
+                desc: "Pre-landing PR review. Finds SQL safety issues, LLM trust boundaries, conditional side effects. Auto-fixes obvious issues.",
+                prompt: "/review\nReview the diff on this branch. Find structural bugs that pass CI but break in prod."
+            },
+            {
+                name: "/browse ($B)",
+                type: "gstack",
+                cat: "qa",
+                desc: "Headless browser daemon CLI. Real clicks, ~100ms/command. Navigate, interact, screenshot, diff, annotate. Persistent sessions.",
+                prompt: "$B goto https://myapp.com && $B snapshot -i -a -o /tmp/homepage.png"
+            },
+            {
+                name: "/design-consultation",
+                type: "gstack",
+                cat: "strategy",
+                desc: "Complete design system from scratch. Researches landscape, proposes typography, color, spacing, motion. Creates DESIGN.md.",
+                prompt: "/design-consultation\nCreate a design system for our developer tools dashboard. Modern, minimal, dark-mode first."
+            },
+            {
+                name: "/design-review",
+                type: "gstack",
+                cat: "qa",
+                desc: "Live-site visual audit and fix loop. Finds spacing issues, hierarchy problems, and AI slop. Before/after screenshots.",
+                prompt: "/design-review https://myapp.com\nAudit the landing page for visual consistency, spacing, and hierarchy issues."
+            },
+            {
+                name: "/retro",
+                type: "gstack",
+                cat: "strategy",
+                desc: "Weekly engineering retrospective. Analyzes commit history, per-person breakdowns, shipping streaks, test health trends.",
+                prompt: "/retro\nRun the weekly retro for this repo. Show shipping velocity, test health, and code quality trends."
+            },
+            {
+                name: "/cso",
+                type: "gstack",
+                cat: "safety",
+                desc: "Chief Security Officer audit. Infrastructure security, secrets archaeology, supply chain, OWASP Top 10, STRIDE threat modeling.",
+                prompt: "/cso\nRun a comprehensive security audit. Check for leaked secrets, supply chain risks, and OWASP Top 10 vulnerabilities."
+            },
+            {
+                name: "/codex",
+                type: "gstack",
+                cat: "code",
+                desc: "Multi-AI second opinion via OpenAI Codex CLI. Three modes: code review (pass/fail), adversarial (tries to break code), open consultation.",
+                prompt: "/codex review\nGet a second opinion on the diff from a different AI model. Flag anything Claude might have missed."
+            },
+            {
+                name: "/document-release",
+                type: "gstack",
+                cat: "code",
+                desc: "Post-ship documentation updates. Cross-references diff against README, ARCHITECTURE, CONTRIBUTING, CHANGELOG. Keeps docs current.",
+                prompt: "/document-release\nWe just shipped the auth refactor. Update all project docs to reflect the changes."
+            },
+
+            // ═══════════════════════════════════════════
+            // ECC SKILLS & AGENTS
+            // ═══════════════════════════════════════════
+
+            // --- Planning & Architecture ---
+            {
+                name: "/plan",
+                type: "ecc",
+                cat: "strategy",
+                desc: "Create a step-by-step implementation plan. Restates requirements, assesses risks, identifies dependencies. Waits for CONFIRM before coding.",
+                prompt: "/plan\nPlan the implementation for adding OAuth2 login with Google and GitHub providers."
+            },
+            {
+                name: "planner agent",
+                type: "ecc",
+                cat: "strategy",
+                desc: "Implementation planning agent for complex features. Breaks work into phases, identifies critical files, considers trade-offs.",
+                prompt: "Use the planner agent to break down the database migration from MySQL to PostgreSQL into phases."
+            },
+            {
+                name: "architect agent",
+                type: "ecc",
+                cat: "strategy",
+                desc: "System design specialist for scalability, tech decisions, and architectural patterns. Use for structural decisions.",
+                prompt: "Use the architect agent to evaluate whether we should use event sourcing or CRUD for the order system."
+            },
+
+            // --- TDD & Testing ---
+            {
+                name: "/tdd",
+                type: "ecc",
+                cat: "code",
+                desc: "Test-driven development workflow. Scaffold interfaces, write tests FIRST, then implement minimal code to pass. Target 80%+ coverage.",
+                prompt: "/tdd\nImplement the EmailService with send, queue, and retry methods. Start with failing tests."
+            },
+            {
+                name: "tdd-guide agent",
+                type: "ecc",
+                cat: "code",
+                desc: "TDD enforcement agent. Ensures write-tests-first methodology for new features and bug fixes. Proactively activated.",
+                prompt: "Use the tdd-guide agent to add test coverage for the PaymentProcessor class before refactoring it."
+            },
+            {
+                name: "/e2e",
+                type: "ecc",
+                cat: "qa",
+                desc: "Generate and run Playwright E2E tests. Creates test journeys, captures screenshots/videos/traces, uploads artifacts.",
+                prompt: "/e2e\nGenerate E2E tests for the login → dashboard → settings user journey."
+            },
+            {
+                name: "/test-coverage",
+                type: "ecc",
+                cat: "qa",
+                desc: "Analyze and improve test coverage. Identifies untested code paths and generates tests to reach 80%+ threshold.",
+                prompt: "/test-coverage\nAnalyze coverage for src/services/ and generate tests for any gaps below 80%."
+            },
+
+            // --- Code Review & Quality ---
+            {
+                name: "/code-review",
+                type: "ecc",
+                cat: "code",
+                desc: "Expert code review for quality, security, and maintainability. Proactively reviews after writing or modifying code.",
+                prompt: "/code-review\nReview all changes on this branch for quality, security, and maintainability issues."
+            },
+            {
+                name: "security-reviewer agent",
+                type: "ecc",
+                cat: "safety",
+                desc: "Security vulnerability detection. Flags secrets, SSRF, injection, unsafe crypto, OWASP Top 10. Use proactively after writing sensitive code.",
+                prompt: "Run the security-reviewer agent on src/auth/ and src/api/ to check for vulnerabilities before we ship."
+            },
+            {
+                name: "/refactor-clean",
+                type: "ecc",
+                cat: "code",
+                desc: "Dead code cleanup and consolidation. Runs analysis tools (knip, depcheck, ts-prune) to identify unused code and safely removes it.",
+                prompt: "/refactor-clean\nFind and remove dead code, unused imports, and duplicate utilities across the project."
+            },
+
+            // --- Language-Specific Patterns ---
+            {
+                name: "python-patterns",
+                type: "ecc",
+                cat: "code",
+                desc: "Pythonic idioms, PEP 8, type hints, and best practices. Covers error handling, data classes, generators, and async patterns.",
+                prompt: "Apply python-patterns to refactor src/services/data_processor.py. Add type hints and make it more idiomatic."
+            },
+            {
+                name: "golang-patterns",
+                type: "ecc",
+                cat: "code",
+                desc: "Idiomatic Go patterns: error handling, interfaces, concurrency with goroutines/channels, and project structure.",
+                prompt: "Review cmd/server/main.go against golang-patterns. Check error handling and concurrency safety."
+            },
+            {
+                name: "rust-patterns",
+                type: "ecc",
+                cat: "code",
+                desc: "Idiomatic Rust: ownership, lifetimes, error handling with Result/Option, traits, and safe concurrency patterns.",
+                prompt: "Apply rust-patterns to src/parser.rs. Fix any ownership issues and improve error handling."
+            },
+            {
+                name: "frontend-patterns",
+                type: "ecc",
+                cat: "code",
+                desc: "React, Next.js, state management, performance optimization, and UI best practices.",
+                prompt: "Review components/Dashboard/ against frontend-patterns. Check for unnecessary re-renders and state management."
+            },
+            {
+                name: "springboot-patterns",
+                type: "ecc",
+                cat: "code",
+                desc: "Spring Boot architecture: REST APIs, layered services, JPA data access, caching, async processing, and logging.",
+                prompt: "Apply springboot-patterns to the OrderService. Check layering, transaction boundaries, and error handling."
+            },
+            {
+                name: "kotlin-patterns",
+                type: "ecc",
+                cat: "code",
+                desc: "Idiomatic Kotlin: null safety, coroutines, DSL builders, sealed classes, and extension functions.",
+                prompt: "Review the data layer using kotlin-patterns. Check null safety, coroutine usage, and Flow patterns."
+            },
+            {
+                name: "django-patterns",
+                type: "ecc",
+                cat: "code",
+                desc: "Django architecture: REST API design with DRF, ORM best practices, caching, signals, middleware.",
+                prompt: "Apply django-patterns to the API views. Check queryset optimization and serializer patterns."
+            },
+            {
+                name: "laravel-patterns",
+                type: "ecc",
+                cat: "code",
+                desc: "Laravel architecture: Eloquent ORM, service layers, queues, events, caching, and API resources.",
+                prompt: "Review the OrderController using laravel-patterns. Check for fat controllers and missing service layer."
+            },
+
+            // --- Database ---
+            {
+                name: "postgres-patterns",
+                type: "ecc",
+                cat: "code",
+                desc: "PostgreSQL query optimization, schema design, indexing strategies, RLS policies, and Supabase best practices.",
+                prompt: "Apply postgres-patterns to the migrations. Check indexes, add RLS policies, and optimize the slow queries."
+            },
+            {
+                name: "database-migrations",
+                type: "ecc",
+                cat: "code",
+                desc: "Migration best practices for zero-downtime deployments across PostgreSQL, MySQL, and common ORMs (Prisma, Drizzle, Django).",
+                prompt: "Review the pending migration for the users table split. Ensure zero-downtime rollback strategy."
+            },
+
+            // --- Build & Fix ---
+            {
+                name: "/build-fix",
+                type: "ecc",
+                cat: "code",
+                desc: "Build and TypeScript error resolution. Fixes build/type errors with minimal diffs. Focuses on getting the build green quickly.",
+                prompt: "/build-fix\nThe TypeScript build is failing with 12 type errors. Fix them with minimal changes."
+            },
+            {
+                name: "/verify",
+                type: "ecc",
+                cat: "qa",
+                desc: "Comprehensive verification loop: linting, tests, coverage, security scans, and deployment readiness checks.",
+                prompt: "/verify\nRun the full verification suite before we create the PR."
+            },
+
+            // --- Documentation & Docs ---
+            {
+                name: "/docs",
+                type: "ecc",
+                cat: "code",
+                desc: "Look up current library/framework documentation via Context7 MCP. Returns answers with up-to-date code examples.",
+                prompt: "/docs\nWhat's the latest API for Playwright's page.waitForSelector? Show me the current options."
+            },
+
+            // --- Multi-Agent & Orchestration ---
+            {
+                name: "/devfleet",
+                type: "ecc",
+                cat: "strategy",
+                desc: "Orchestrate parallel Claude Code agents in isolated worktrees. Plan from natural language, dispatch agents, monitor progress.",
+                prompt: "/devfleet\nSplit the auth refactor into 3 parallel tasks: OAuth provider, session management, and middleware."
+            },
+            {
+                name: "/multi-plan",
+                type: "ecc",
+                cat: "strategy",
+                desc: "Multi-model collaborative planning. Uses different model perspectives to create more robust implementation plans.",
+                prompt: "/multi-plan\nPlan the API v2 migration. Use multiple perspectives to identify risks I might miss."
+            },
+
+            // --- Content & Marketing ---
+            {
+                name: "blog-writing",
+                type: "ecc",
+                cat: "strategy",
+                desc: "Technical blog posts, tutorials, product announcements, and thought leadership for developer audiences.",
+                prompt: "Using blog-writing, write a technical post about how we reduced API latency by 60% with connection pooling."
+            },
+            {
+                name: "frontend-slides",
+                type: "ecc",
+                cat: "strategy",
+                desc: "Create animation-rich HTML presentations from scratch or convert PowerPoint files. Production-quality slides.",
+                prompt: "Using frontend-slides, create a 10-slide deck for the Q2 engineering review. Modern dark theme."
+            },
+
+            // --- Domain Knowledge ---
+            {
+                name: "/flowlyte",
+                type: "ecc",
+                cat: "code",
+                desc: "Flowlyte domain expert. Instant answers about proprietary metrics (FT_Score, FVS, ETS, RS_Score, Squeeze), AI agent system, data pipeline, subscription tiers, and full platform architecture.",
+                prompt: "/flowlyte What is FVS_Z_Score and how is it calculated?\nExplain the three-layer cache hierarchy and how tiered scanning works."
+            },
+
+            // --- Incident Documentation ---
+            {
+                name: "/incident-report",
+                type: "ecc",
+                cat: "code",
+                desc: "Generate structured technical incident reports from session context. Analyzes git history, identifies root cause, and produces INC-dated post-mortems with timeline, data flow trace, and prevention steps.",
+                prompt: "/incident-report\nDocument the bug we just fixed. Include root cause analysis, files modified, and prevention measures."
+            },
+
+            // --- Session Management ---
+            {
+                name: "/save-session",
+                type: "ecc",
+                cat: "strategy",
+                desc: "Save current session state so work can be resumed later with full context preserved.",
+                prompt: "/save-session\nSave progress on the auth refactor. I'll pick this up tomorrow."
+            },
+            {
+                name: "/resume-session",
+                type: "ecc",
+                cat: "strategy",
+                desc: "Load the most recent session file and resume work with full context from where you left off.",
+                prompt: "/resume-session\nPick up where we left off on the auth refactor."
+            },
+
+            // ═══════════════════════════════════════════
+            // AGENT OS: Standards, Specs & Product Planning
+            // ═══════════════════════════════════════════
+
+            {
+                name: "/agent-os/discover-standards",
+                type: "agentos",
+                cat: "strategy",
+                desc: "Extract tribal knowledge from your codebase into concise, documented standards. Analyzes code patterns, presents findings interactively, asks why behind each pattern, and writes standards files to agent-os/standards/.",
+                prompt: "/agent-os/discover-standards\nAnalyze the API layer and extract any tribal knowledge — response formats, error handling patterns, or naming conventions that aren't obvious from the framework defaults."
+            },
+            {
+                name: "/agent-os/index-standards",
+                type: "agentos",
+                cat: "strategy",
+                desc: "Rebuild the standards index (index.yml). Scans agent-os/standards/ for all .md files, prompts for descriptions on new entries, removes stale entries for deleted files. Keeps the index in sync so /inject-standards can match accurately.",
+                prompt: "/agent-os/index-standards\nRebuild the index. I manually added some new standards files and need the index updated."
+            },
+            {
+                name: "/agent-os/inject-standards",
+                type: "agentos",
+                cat: "code",
+                desc: "Load relevant standards into the current context. Auto-suggest mode analyzes your task and recommends matching standards. Explicit mode injects specific files or folders. Adapts output format for conversation, skill creation, or plan/spec building.",
+                prompt: "/agent-os/inject-standards\nI'm about to implement a new REST endpoint. Suggest and inject the relevant API and database standards."
+            },
+            {
+                name: "/agent-os/plan-product",
+                type: "agentos",
+                cat: "strategy",
+                desc: "Interactive product documentation builder. Gathers vision, target users, differentiators, MVP roadmap, and tech stack through guided Q&A. Creates mission.md, roadmap.md, and tech-stack.md in agent-os/product/.",
+                prompt: "/agent-os/plan-product\nLet's define the product mission and roadmap for this project. Start with the problem we're solving."
+            },
+            {
+                name: "/agent-os/shape-spec",
+                type: "agentos",
+                cat: "strategy",
+                desc: "Structured planning for significant features. Must run in plan mode. Gathers scope, visuals, reference implementations, product context, and relevant standards. Outputs a timestamped spec folder with plan.md, shape.md, standards.md, and references.md.",
+                prompt: "/agent-os/shape-spec\nWe're building a real-time notification system. I have mockups and want to reference how the comments feature handles WebSocket connections."
+            }
+        ];
+
+        const grid = document.getElementById('skills-grid');
+        const search = document.getElementById('search');
+        const filterBtns = document.querySelectorAll('.filter-btn');
+
+        document.getElementById('total-count').textContent = skills.length;
+
+        function badgeClass(type) {
+            if (type === 'gstack') return 'badge-gstack';
+            if (type === 'ecc') return 'badge-ecc';
+            if (type === 'agentos') return 'badge-agentos';
+            return 'badge-integrated';
+        }
+
+        function badgeLabel(type) {
+            if (type === 'gstack') return 'G-Stack';
+            if (type === 'ecc') return 'ECC';
+            if (type === 'agentos') return 'Agent OS';
+            return 'Claude+GStack+ECC';
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        function renderSkills(filtered) {
+            grid.innerHTML = filtered.map(s => `
+                <div class="card" data-type="${s.type}" data-cat="${s.cat}">
+                    <div class="card-header">
+                        <span class="skill-name">${escapeHtml(s.name)}</span>
+                        <span class="badge ${badgeClass(s.type)}">${badgeLabel(s.type)}</span>
+                    </div>
+                    <p class="description">${escapeHtml(s.desc)}</p>
+                    <div class="prompt-section">
+                        <div class="prompt-label">
+                            Sample Prompt
+                            <button class="copy-btn" onclick="copyPrompt(this)">Copy</button>
+                        </div>
+                        <pre>${escapeHtml(s.prompt)}</pre>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        window.copyPrompt = (btn) => {
+            const pre = btn.closest('.prompt-section').querySelector('pre');
+            navigator.clipboard.writeText(pre.textContent).then(() => {
+                const orig = btn.innerText;
+                btn.innerText = 'Copied!';
+                btn.style.color = 'var(--accent)';
+                setTimeout(() => { btn.innerText = orig; btn.style.color = ''; }, 2000);
+            });
+        };
+
+        let activeFilter = 'all';
+
+        search.addEventListener('input', (e) => {
+            const term = e.target.value.toLowerCase();
+            let pool = activeFilter === 'all' ? skills : skills.filter(s => s.type === activeFilter || s.cat === activeFilter);
+            if (term) {
+                pool = pool.filter(s =>
+                    s.name.toLowerCase().includes(term) ||
+                    s.desc.toLowerCase().includes(term) ||
+                    s.cat.toLowerCase().includes(term) ||
+                    s.prompt.toLowerCase().includes(term)
+                );
+            }
+            renderSkills(pool);
+        });
+
+        filterBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                filterBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                activeFilter = btn.dataset.filter;
+                const term = search.value.toLowerCase();
+                let pool = activeFilter === 'all' ? skills : skills.filter(s => s.type === activeFilter || s.cat === activeFilter);
+                if (term) {
+                    pool = pool.filter(s =>
+                        s.name.toLowerCase().includes(term) ||
+                        s.desc.toLowerCase().includes(term) ||
+                        s.cat.toLowerCase().includes(term) ||
+                        s.prompt.toLowerCase().includes(term)
+                    );
+                }
+                renderSkills(pool);
+            });
+        });
+
+        renderSkills(skills);
+    </script>
+</body>
+</html>
