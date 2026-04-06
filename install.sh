@@ -176,7 +176,7 @@ ok "━━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 echo "  Installed:"
 echo "    - 29 agents"
-echo "    - 63 slash commands"
+echo "    - 64 slash commands"
 echo "    - 81 skills"
 echo "    - 14 rule sets (common + 13 languages)"
 echo "    - Hook system (pre/post tool use, session lifecycle)"
