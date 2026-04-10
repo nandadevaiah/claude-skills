@@ -73,14 +73,55 @@ fi
 
 info "Installing Claude Code configuration..."
 
-# Copy all config directories
-for dir in agents commands rules scripts skills hooks mcp-configs ecc; do
+# Install order matters for skills/:
+#   1. Clone gstack first (provides /checkpoint, /codex, /cso, /design-*, etc.)
+#   2. Copy ECC skills per-entry (overrides any gstack-created symlinks with
+#      our clean de-telemetry'd forks of autoplan/ship/qa/freeze/guard/etc.)
+# This guarantees ECC forks always win, even if gstack's own setup is re-run
+# later (just re-run install.sh to restore).
+
+# ─── Install external skills (gstack) ────────────────────────────────────────
+# Done FIRST so the ECC skills copy below can overwrite any symlinks gstack
+# creates for skill names we also fork (autoplan, ship, qa, freeze, etc.)
+
+GSTACK_DIR="$TARGET_DIR/skills/gstack"
+mkdir -p "$TARGET_DIR/skills"
+if [[ ! -d "$GSTACK_DIR" ]]; then
+    info "Installing gstack skill from garrytan/gstack..."
+    if command -v git &>/dev/null; then
+        git clone --depth 1 https://github.com/garrytan/gstack "$GSTACK_DIR" 2>/dev/null && \
+            ok "Installed gstack skill" || \
+            warn "Failed to clone gstack (may be private repo). Skipping."
+    else
+        warn "git not found. Skipping gstack install."
+    fi
+else
+    ok "gstack skill already installed"
+fi
+
+# Copy non-skills config directories (full rm -rf + copy)
+for dir in agents commands rules scripts hooks mcp-configs ecc; do
     if [[ -d "$SOURCE_DIR/$dir" ]]; then
         rm -rf "$TARGET_DIR/$dir"
         cp -r "$SOURCE_DIR/$dir" "$TARGET_DIR/$dir"
         ok "Installed $dir/"
     fi
 done
+
+# Copy skills per-entry so we preserve the gstack/ clone and forcibly
+# overwrite any gstack-created symlinks with our real ECC fork files.
+if [[ -d "$SOURCE_DIR/skills" ]]; then
+    skill_count=0
+    for skill_src in "$SOURCE_DIR/skills"/*/; do
+        name=$(basename "$skill_src")
+        # Never touch the gstack clone subdir
+        [[ "$name" == "gstack" ]] && continue
+        rm -rf "$TARGET_DIR/skills/$name"
+        cp -r "$skill_src" "$TARGET_DIR/skills/$name"
+        skill_count=$((skill_count+1))
+    done
+    ok "Installed skills/ ($skill_count ECC skills, gstack preserved)"
+fi
 
 # Copy top-level config files
 for file in settings.json claude_code_config.json plugin.json AGENTS.md README.md; do
@@ -98,22 +139,6 @@ for dotdir in .agents .codex .cursor .opencode; do
         ok "Installed $dotdir/"
     fi
 done
-
-# ─── Install external skills (gstack) ────────────────────────────────────────
-
-GSTACK_DIR="$TARGET_DIR/skills/gstack"
-if [[ ! -d "$GSTACK_DIR" ]]; then
-    info "Installing gstack skill from garrytan/gstack..."
-    if command -v git &>/dev/null; then
-        git clone --depth 1 https://github.com/garrytan/gstack "$GSTACK_DIR" 2>/dev/null && \
-            ok "Installed gstack skill" || \
-            warn "Failed to clone gstack (may be private repo). Skipping."
-    else
-        warn "git not found. Skipping gstack install."
-    fi
-else
-    ok "gstack skill already installed"
-fi
 
 # ─── Install plugins ─────────────────────────────────────────────────────────
 
