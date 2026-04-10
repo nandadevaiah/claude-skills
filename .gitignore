@@ -31,3 +31,4 @@ projects/
 # OS junk
 .DS_Store
 Thumbs.db
+.hariari-worktrees/
