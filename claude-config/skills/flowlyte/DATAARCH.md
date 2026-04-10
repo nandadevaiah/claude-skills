@@ -3,8 +3,14 @@ name: flowlyte-dataarch-expert
 description: >
   Complete domain knowledge for Flowlyte's data pipeline architecture, compute engines,
   caching hierarchy, tiered scanning system, math engine pipeline, data source fallback chains,
-  GCS integration, scheduling, and known technical debt. Source: architecture-data-pipeline.html.
-version: 1.0.0
+  GCS integration, scheduling, theme discovery pipeline (dedup, PE enrichment, sector diversity),
+  options data pipeline (snapshot runner, thematic heat, IV/ETS divergence, base-result caching,
+  3-layer API cache, GCS live views, Cloud Run Jobs deployment), options flow persistence
+  (WebSocket to GCS parquet + Supabase daily summaries + anomaly events), agent options
+  intelligence pipeline (6 tools wired into Analyst/Guardian/Scout/Macro, options intelligence
+  domain, Guardian proactive flow risk check, health engine option handling), and known
+  technical debt.
+version: 1.4.0
 source: docs/architecture-data-pipeline.html
 ---
 
@@ -658,3 +664,673 @@ Set `DISABLE_SCAN_SCHEDULERS=true` on the Cloud Run Service to disable `schedule
 - Ticker tape: 60s refresh loop, jitter reduced from ±0.2% to ±0.01%
 - Per-ticker math timeout raised from 30s to 60s
 - Gold Layer backfill: 42/42 trading days in Jan 29 – Mar 27 range
+
+---
+
+## 14. THEME DISCOVERY PIPELINE (April 9, 2026)
+
+### Architecture
+
+Theme Discovery has two data paths serving different UI components:
+
+```
+Path A: Discovery Cache (SCAN tab, /api/thematic/discovery)
+  refresh_global_themes.py → global_theme_cache.json → API reads cache → frontend
+
+Path B: Theme History (DISCOVER tab + Dashboard cards, /api/thematic/discovery/history)
+  refresh_global_themes.py → save_to_history() → Supabase theme_history table → API queries DB → frontend
+```
+
+**Frontend consumers:**
+| Component | File | API Called | Data Source |
+|-----------|------|-----------|-------------|
+| Dashboard Theme Discovery cards | `src/components/intelligence/DiscoveryRail.tsx` | `fetchThematicHistory()` | Path B (Supabase) |
+| SCAN tab (admin) | `src/pages/ThematicAnalysis.tsx` | `fetchThematicDiscovery()` | Path A (cache file) |
+| DISCOVER tab | `src/pages/ThematicAnalysis.tsx` | `fetchThematicHistory()` | Path B (Supabase) |
+| Market Pulse (Trending Themes) | `src/pages/MarketPulse.tsx` | `fetchThematicDiscovery()` | Path A (cache file) |
+
+### Refresh Pipeline (`execution/core_backend_schedulers/refresh_global_themes.py`)
+
+```
+refresh_themes(force, limit_tickers)
+  |
+  +-- 1. Load market data (aggregator.load_market_data)
+  +-- 2. Scan for outliers (min_strength=70, min_rel_vol=1.5)
+  |      Cap at 100 outliers
+  +-- 3. DBSCAN clustering (theme_engine.detect_clusters, correlation_threshold=0.70)
+  +-- 4. Sort by viral_score descending
+  +-- 5. PASS 1: Ticker-union dedup (collect up to 10 candidates)
+  |      - Build running set of accepted tickers
+  |      - Skip if >50% of cluster's tickers already in union
+  |      - Tag similar_to from theme_history (7-day lookback, Jaccard >=0.40)
+  +-- 6. PASS 2: Sector diversity soft cap
+  |      - Uses TICKER_CATEGORY_MAP for dominant sector per theme
+  |      - If >60% of top 5 share same sector AND alternatives exist:
+  |        demote weakest same-sector, promote best different-sector
+  |      - Re-sort by viral_score after swap
+  +-- 7. AI enrichment (top 5: Linkup preferred, OpenAI fallback)
+  +-- 8. Save cache (global_theme_cache.json, key: "themes")
+  +-- 9. Archive to theme_history (Supabase, if viral_score >0.3 or fracture_risk High/Critical)
+         - Dedup: 7-day lookback, Jaccard >=0.60 or exact name match
+```
+
+### PE Enrichment (Background Task)
+
+PE ratios are NOT fetched in the hot API path. The `/api/thematic/discovery/history` endpoint returns results immediately from Supabase, then kicks PE enrichment into a FastAPI `BackgroundTask`:
+
+```
+GET /api/thematic/discovery/history
+  |
+  +-- Query Supabase theme_history (fast, ~200ms)
+  +-- Dedup by theme_name (keep newest)
+  +-- Return results immediately
+  +-- Background: _enrich_theme_pe(results)
+       +-- Load ETF taxonomy (filter ETFs from PE calc)
+       +-- Collect tickers needing PE (max 5 per theme)
+       +-- Fetch FMP ratios-ttm per ticker (sequential)
+       +-- Persist avg_pe to theme_history rows
+       +-- Next request gets cached PE values
+```
+
+**Key design decision**: PE appears on the *next* request, not the current one. This is intentional to keep the endpoint fast. The Global Alpha Matrix (PE x Viral Score scatter plot) may show dots at x=0 for one request cycle after fresh themes are written.
+
+### Dedup Algorithm Details
+
+**Pass 1 — Ticker-Union Coverage** (`UNION_COVERAGE_THRESHOLD = 0.50`):
+- First accepted theme's tickers seed the union
+- Each subsequent theme: compute `|tickers ∩ union| / |tickers|`
+- If >=50% covered, skip (tickers already represented by prior themes)
+- Otherwise accept and add tickers to union
+- Collects up to 10 candidates for Pass 2
+
+**Pass 2 — Sector Diversity Soft Cap** (`SECTOR_CAP_RATIO = 0.60`):
+- Only runs if >5 candidates from Pass 1 AND TICKER_CATEGORY_MAP available
+- Computes dominant sector per theme via majority vote of ticker sectors
+- If >60% of top 5 share one sector: swap weakest same-sector for best different-sector
+- If no alternatives exist (market genuinely one-sector), all 5 are kept
+- Re-sorts by viral_score after swap
+
+### Cache File Format
+
+`backend/data/global_theme_cache.json`:
+```json
+{
+  "timestamp": "2026-04-09T15:24:40.668",
+  "themes": [
+    {
+      "theme_name": "Permian Power Surge",
+      "viral_score": 0.88,
+      "fracture_risk": "Low",
+      "avg_return": 0.497,
+      "leader": "APA",
+      "tickers": ["CRC", "CHRD", "MGY", "APA"],
+      "ai_summary": "...",
+      "similar_to": null
+    }
+  ]
+}
+```
+
+**Note**: Cache saves with `"themes"` key. The `/api/thematic/discovery` endpoint normalizes to `"clusters"` key for frontend compatibility (lines 2313-2315 of main.py).
+
+### Known Limitations
+
+1. **Quiet market empty state**: When min_strength=70 and min_rel_vol=1.5 find zero outliers, cache is saved as `"themes": []`. No fallback to curated static themes from `theme_manager.py`.
+2. **DBSCAN parameter sensitivity**: correlation_threshold=0.70 is hardcoded. No adaptive logic for high/low correlation regimes.
+3. **FMP rate limits**: Background PE task does sequential FMP calls with no quota tracking. FMP free tier is 250 calls/day.
+4. **theme_history has no TTL**: Rows accumulate indefinitely. 7-day dedup window prevents short-term duplicates but not long-term repetition.
+5. **save_to_history N+1 queries**: Each theme independently queries theme_history for dedup check, despite the refresh pipeline already having fetched this data.
+
+### Incident Reference
+
+See `technical_documentation/INC-20260409-theme-discovery-skeleton-loaders.md` for the full incident report on the PE enrichment blocking bug and its resolution.
+
+---
+
+## 15. OPTIONS DATA PIPELINE (April 9, 2026)
+
+### Overview
+
+The options pipeline collects option chain snapshots from Polygon.io, computes derived views (scanner rankings, thematic heat, IV/ETS divergence, GEX profiles), and stores everything in GCS. The API serves pre-computed data from GCS with in-memory caching, falling back to expensive on-demand Polygon scans only when GCS data is missing.
+
+### Key Files
+
+| File | Role |
+|------|------|
+| `backend/options_snapshot_runner.py` | CLI entry point — fetches chains, generates live views, uploads to GCS |
+| `backend/routers/options_router.py` | API endpoints with 3-layer caching |
+| `backend/logic/options_data_lake.py` | GCS reader with L0 local file cache |
+| `backend/logic/engines/thematic_options_heat.py` | Aggregates options flow by 24 investment themes |
+| `backend/logic/engines/iv_ets_divergence.py` | Detects IV vs ETS divergence signals |
+| `backend/logic/engines/options_scanner_engine.py` | Volume leaders, IV rankings, P/C ratios |
+| `backend/logic/options_tiers.py` | Tier definitions — resolves ticker lists dynamically |
+| `execution/build_and_deployment_automation/deploy_options_tiers.sh` | Cloud Run Jobs + Scheduler deployment |
+
+### Tiered Scan Architecture
+
+| Tier | Tickers | Cadence | Resources | Timeout |
+|------|---------|---------|-----------|---------|
+| T1 | ~72 liquid names (SPY, QQQ, AAPL, NVDA, etc.) | Every 5 min | 2Gi / 1 CPU | 10 min |
+| T2 | ~200 mid-liquidity names | Every 15 min | 2Gi / 1 CPU | 15 min |
+| T3 | All ~2096 tickers | Every 60 min | 4Gi / 2 CPU | 30 min |
+
+- Tickers resolved dynamically via `get_tier_tickers()` in `backend/logic/options_tiers.py` — no hardcoded ticker lists in deploy scripts
+- All jobs use `--parallelism=1` to prevent concurrent GCS writes to the same date files
+- Schedules: Mon–Fri 14:00–21:00 UTC (covers market hours in both EDT and EST with slight overshoot)
+- Deployment: Cloud Run Jobs triggered by Cloud Scheduler (see `deploy_options_tiers.sh`, all commands commented out by default)
+
+**Required secrets** (via Secret Manager):
+`POLYGON_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `GOOGLE_APPLICATION_CREDENTIALS`
+
+### GCS Storage Layout
+
+```
+gs://flowlyte-data-lake-v1/options/
+├── snapshots/{DATE}/                    # Raw chain data (Parquet, snappy)
+│   ├── AAPL.parquet                     # Full option chain per ticker
+│   ├── SPY.parquet                      #   (strike, expiry, type, iv, volume, oi, greeks)
+│   ├── _summary.parquet                 # Index: avg_iv, contract_count, total_volume, total_oi
+│   └── ...
+└── live/{DATE}/                         # Derived views (JSON)
+    ├── _scanner.json                    # Volume leaders, IV rankings, P/C ratios
+    ├── _thematic_heat.json              # Theme-level options aggregation (NEW)
+    ├── _iv_ets.json                     # IV vs ETS divergence signals (NEW)
+    ├── _manifest.json                   # Run metadata
+    ├── chains/{TICKER}.json             # Per-ticker chain with Greeks
+    └── gex/{TICKER}.json               # Per-ticker gamma exposure profile
+```
+
+### JSON v2 Accumulated Format
+
+Live view files use a versioned accumulated format. Each scan run appends an entry:
+
+```json
+{
+  "version": 2,
+  "entries": [
+    { "scanned_at": "2026-04-09T14:05:00Z", "themes": [...] },
+    { "scanned_at": "2026-04-09T14:10:00Z", "themes": [...] }
+  ],
+  "last_scanned_at": "2026-04-09T14:10:00Z"
+}
+```
+
+The API returns only `entries[-1]` (latest), but full intraday history is preserved for time-series analysis. The `_accumulate_and_upload()` function handles downloading the existing file from GCS, appending the new entry, and re-uploading atomically.
+
+### Live View Generation Pipeline
+
+`generate_live_views()` in `options_snapshot_runner.py` produces 5 derived views per run:
+
+```
+generate_live_views()
+  |
+  +-- 1. chains/{TICKER}.json — per-ticker chain + Greeks from raw snapshot
+  +-- 2. gex/{TICKER}.json — gamma exposure profile by strike
+  +-- 3. _scanner.json — scan_all() (volume leaders, IV rankings, P/C ratios)
+  +-- 4. _thematic_heat.json — scan_thematic_heat() (24 themes × 6 tickers max)
+  +-- 5. _iv_ets.json — scan_iv_ets_divergence(top_n=100)
+  +-- 6. _manifest.json — run metadata (date, ticker count, duration, errors)
+```
+
+Steps 4 and 5 call async engine functions via `asyncio.run()` within the synchronous pipeline. Both use `_accumulate_and_upload()` to merge into GCS.
+
+### Three-Layer API Caching
+
+```
+Frontend Request → L1 In-Memory → L2 GCS Data Lake → L3 On-Demand Compute
+```
+
+**L1: In-memory response cache** (`_response_cache` dict in `options_router.py`):
+
+| TTL Type | Duration | Endpoints |
+|----------|----------|-----------|
+| `chain` | 60s | Single-ticker chain |
+| `gex` | 120s | Gamma exposure |
+| `flow` | 30s | Live flow trades |
+| `scanner` | 300s (5 min) | Scanner, thematic heat, IV/ETS |
+| `screener` | 120s | Strategy screener |
+
+Thread-safe expiry: uses `pop(key, None)` instead of `del` to avoid `KeyError` under concurrent asyncio access.
+
+**L2: GCS Data Lake** (`OptionsDataLake` in `options_data_lake.py`):
+- Downloads from GCS blob → writes to local L0 cache at `backend/cache/options_live/{DATE}/`
+- L0 TTL: 300s (5 min) — avoids repeated GCS downloads within the window
+- Returns `None` if blob doesn't exist, triggering L3 fallback
+
+**L3: On-demand compute** (engine functions):
+- Calls Polygon API directly: batch size 5, 0.4s sleep between batches
+- Slowest path: 8–60 seconds depending on ticker count (69 DEFAULT_SCAN_TICKERS, 24 themes × 6 tickers)
+- Result cached in L1 for subsequent requests
+
+### Base-Result Caching Pattern (Thematic Heat & IV/ETS)
+
+To avoid cache key explosion from filter parameter combinations, both endpoints use one cache key per date:
+
+```
+Traditional: thematic_heat:2026-04-09:AI,Semis:500  → N×M cache entries
+Base-result: thematic_heat_base:2026-04-09           → 1 cache entry + in-memory filtering
+```
+
+1. Engine called with **no filters** — fetches all themes/signals for the date
+2. Result cached under a single date-based key
+3. `_apply_thematic_heat_filters()` / `_apply_iv_ets_filters()` apply user filters in memory
+
+**IV/ETS filter** (`_apply_iv_ets_filters`):
+- Filters by `min_ets` threshold, `signal_filter` type, `top_n` limit
+- Summary dict always includes all 5 canonical types via `_IV_ETS_SIGNAL_TYPES`: `breakout_watch`, `building_momentum`, `expensive_momentum`, `fear_fade`, `neutral`
+- Handles `None` ETS values with `(r.get("ets") or 0)`
+
+**Thematic heat filter** (`_apply_thematic_heat_filters`):
+- Filters by theme names (case-insensitive) and `min_volume` threshold on aggregated `total_volume`
+- Recalculates `total_themes` and `hot_themes` counts after filtering (not stale base counts)
+
+### Data Lake Accessor API
+
+`OptionsDataLake` class (singleton via `get_options_lake()`) provides:
+
+| Method | Returns |
+|--------|---------|
+| `get_scanner(date)` | Scanner results (volume leaders, IV rankings) |
+| `get_thematic_heat(date)` | Theme-level options aggregation |
+| `get_iv_ets(date)` | IV vs ETS divergence signals |
+| `get_chain(date, ticker)` | Full option chain for a specific ticker |
+| `get_gex(date, ticker)` | Gamma exposure profile |
+| `get_scanner_history(dates)` | Multi-day scanner time series |
+| `get_thematic_heat_history(dates)` | Multi-day thematic heat time series |
+| `get_iv_ets_history(dates)` | Multi-day IV/ETS signal time series |
+
+All methods handle GCS download, L0 caching, and v1/v2 format normalization automatically. Safe to call from AI agents.
+
+### Thematic Heat Engine Details
+
+`scan_thematic_heat()` in `thematic_options_heat.py`:
+- Uses 24 investment themes from `theme_manager.py` (AI, Semis, Cybersecurity, etc.)
+- Caps at `MAX_TICKERS_PER_THEME = 6` to limit scan latency
+- For each theme: batch-fetches option chain snapshots from Polygon, aggregates volume, IV, P/C ratio
+- Heat classification labels: Institutional Focus, High Volume/Weak Trend, Momentum Building, Elevated IV, Moderate Activity, Quiet
+- Heat colors: emerald (hot), blue (warm) used for `hot_themes` counting
+
+### IV/ETS Divergence Engine Details
+
+`scan_iv_ets_divergence()` in `iv_ets_divergence.py`:
+- Loads ETS (Exponential Trend Strength) scores from daily aggregator cache
+- Batch-fetches IV from Polygon option chain snapshots (batch_size=5, 0.4s delay)
+- Cross-references IV and ETS to classify divergence:
+  - `breakout_watch` — low IV + high momentum (market hasn't priced in the trend)
+  - `building_momentum` — moderate IV + rising trend
+  - `expensive_momentum` — high IV + high momentum (priced in, risky)
+  - `fear_fade` — high IV + weak trend (fear premium, potential fade)
+  - `neutral` — no significant divergence
+
+### Known Limitations
+
+1. **`min_volume` semantic mismatch (CRITICAL)**: Engine's `min_volume` filters individual option contracts during Polygon data collection (default: 200). Router's post-cache `min_volume` filter applies to aggregated theme-level `total_volume`. A request with `min_volume=0` gets the 200-contract floor baked in. Needs either API contract change or parameter removal.
+2. **Lake data schema validation**: No runtime check that GCS-precomputed schema matches engine schema field names. Engine schema changes could break lake-cached data.
+3. **Cache-Control header**: `public` sent for user-filtered responses; CDN could serve wrong filter combination.
+4. **No deduplication across tiers**: If T1 and T2 overlap on tickers, both write snapshots. The accumulated JSON format handles this gracefully (append-only), but parquet snapshots are overwritten.
+
+### Previous Trading Day Fallback
+
+When today's GCS data is missing (pre-market, job hasn't run yet, weekends, holidays), the router tries the previous trading day's data before falling back to expensive Polygon API calls. Applied to all 6 lake-backed endpoints.
+
+```
+L1 miss → L2 miss (today) → L2 retry (prev trading day) → L3 Polygon
+```
+
+- `_lake_get_with_fallback()` in `options_router.py` derives the previous trading day from the `today` string (not a second clock read) to avoid midnight-boundary races
+- Max staleness guard: `_MAX_FALLBACK_DAYS = 3` — refuses to serve data older than 3 calendar days (prevents serving week-old data after long holiday weekends)
+- All 6 fallback calls wrapped with `asyncio.to_thread()` to avoid blocking the event loop with synchronous GCS I/O
+- Uses `is_trading_day()` and `get_prev_trading_day()` from `backend/logic/trading_calendar.py`
+
+### Holiday Guard (Snapshot Runner)
+
+`options_snapshot_runner.py` checks `is_trading_day()` immediately after date resolution. On weekends and market holidays, exits with `sys.exit(0)` so Cloud Run Jobs marks the execution as SUCCEEDED (no retry, no wasted Polygon API calls).
+
+---
+
+## 16. OPTIONS FLOW PERSISTENCE (April 10, 2026)
+
+### Overview
+
+Live options flow from the Polygon WebSocket is persisted to two stores: GCS parquet (raw trades, source of truth) and Supabase (per-ticker daily summaries + anomaly events, queryable by agents). Only trades with premium >= $10,000 are persisted (institutional-grade flow).
+
+### Key Files
+
+| File | Role |
+|------|------|
+| `backend/logic/engines/flow_persistence.py` | FlowPersistence class — GCS parquet writes + Supabase upserts |
+| `backend/logic/engines/options_flow_ws.py` | WebSocket consumer — classifies trades, detects anomalies, triggers flush |
+| `backend/logic/engines/flow_anomaly_detector.py` | FlowAnomalyDetector — premium spikes, sweep clusters, volume surges |
+| `backend/migrations/39_options_flow_daily_and_anomalies.sql` | Supabase tables + atomic upsert RPC |
+
+### Data Flow
+
+```
+Polygon WebSocket (T.* options trades, 300-500/min during market)
+    |
+    [premium < $10K? → DROPPED]
+    |
+    v
+OCC Parse → Classify (block/sweep/notable/normal) → Sweep Detect (2s window)
+    |
+    +──→ Ring Buffer (maxlen=2000, in-memory)
+    |
+    +──→ SSE Broadcast to frontend listeners
+    |
+    +──→ Anomaly Detection → route to Sentinel/Guardian/Webhook
+    |                       → buffer to FlowPersistence._anomaly_buffer
+    |
+    v
+_periodic_flush() — every 5 min (wall-clock asyncio task)
+    |
+    +──→ snapshot = list(ring_buffer)  [taken in event loop before threading]
+    |
+    +──→ asyncio.to_thread(flow_persistence.flush, snapshot)
+         |
+         +── 1. _flush_anomalies() → batch insert to options_flow_anomalies
+         +── 2. Filter new trades (ts >= _last_flush_ts, premium >= $10K)
+         +── 3. _append_to_gcs() → dedup + merge into daily parquet
+         +── 4. _upsert_daily_summaries() → aggregate by ticker, RPC upsert
+```
+
+### Supabase Tables
+
+**`options_flow_daily`** — one row per ticker per trading date, upserted every 5 min:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| ticker | TEXT | Underlying symbol |
+| trade_date | DATE | Trading date |
+| call_premium | DOUBLE | Total $ spent on calls |
+| put_premium | DOUBLE | Total $ spent on puts |
+| net_premium | DOUBLE | call_premium - put_premium (derived) |
+| total_premium | DOUBLE | call_premium + put_premium (derived) |
+| call_count | INTEGER | Number of call trades |
+| put_count | INTEGER | Number of put trades |
+| total_count | INTEGER | call_count + put_count (derived) |
+| block_count | INTEGER | Trades with premium >= $100K |
+| sweep_count | INTEGER | Cross-exchange sweeps |
+| notable_count | INTEGER | Trades with size >= 50 contracts |
+| pc_ratio | DOUBLE | put_count / call_count (derived) |
+| sentiment_score | DOUBLE | (net_premium / total_premium) × 100 (derived) |
+| top_trade_premium | DOUBLE | Largest single trade premium for the day |
+| anomaly_count | INTEGER | Number of anomaly events for this ticker/date |
+| updated_at | TIMESTAMPTZ | Last upsert time |
+
+Unique constraint: `(ticker, trade_date)`. Indexed on `trade_date`, `ticker`, `sentiment_score`, and `total_premium DESC`.
+
+**`options_flow_anomalies`** — individual anomaly events:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| ticker | TEXT | Affected underlying |
+| trade_date | DATE | Date of anomaly |
+| anomaly_type | TEXT | `premium_spike`, `sweep_cluster`, `volume_surge` |
+| severity | TEXT | `high` (>= $1M) or `medium` |
+| premium | DOUBLE | Premium that triggered the anomaly |
+| details | JSONB | Full anomaly context (type-specific fields) |
+| created_at | TIMESTAMPTZ | When the anomaly was detected |
+
+### Atomic Upsert RPC
+
+`upsert_flow_daily()` — single-statement INSERT...ON CONFLICT that atomically:
+1. Accumulates raw counts (call/put premium, counts, block/sweep/notable counts)
+2. Derives `total_count`, `net_premium`, `total_premium`, `pc_ratio`, `sentiment_score` from accumulated totals
+3. Takes `GREATEST` of `top_trade_premium` (keeps the day's largest trade)
+
+PostgreSQL evaluates all `EXCLUDED.*` and `options_flow_daily.*` references in the ON CONFLICT SET clause using a single pre-update snapshot, so accumulation and derived field computation are consistent even under concurrent callers.
+
+### Anomaly Buffer
+
+- Events buffered in a plain `list[dict]` with manual bound at 2000
+- `record_anomaly()` shallow-copies the dict (isolates from async routing mutations), logs and drops oldest on overflow
+- `_flush_anomalies()` uses atomic drain: snapshot buffer → clear → insert → restore on failure
+- Anomalies flushed first in `flush()`, independent of GCS health
+
+### Anomaly Detection Thresholds
+
+| Type | Trigger | Min Premium | Window | Cooldown |
+|------|---------|-------------|--------|----------|
+| Premium Spike | Single trade >= 5× rolling median for ticker | $250K | 50-trade rolling median | 15 min/ticker |
+| Sweep Cluster | >= 3 sweeps on same ticker | $250K aggregate | 2 minutes | 15 min/ticker |
+| Volume Surge | >= 10 trades on same contract | $250K aggregate | 5 minutes | 15 min/contract |
+
+Severity: `high` if >= $1M, `medium` otherwise.
+
+### GCS Flow Storage
+
+```
+gs://flowlyte-data-lake-v1/options/flow/{YYYY-MM-DD}/trades.parquet
+```
+
+Parquet schema (18 columns): `underlying`, `contract`, `strike`, `expiry`, `type`, `size`, `price`, `premium`, `exchange`, `timestamp`, `timestamp_readable`, `classification`, `sentiment`, `iv`, `delta`, `oi`, `volume`
+
+Dedup key: `(contract, timestamp, size, price)` — prevents duplicate writes across flush cycles. Timestamp filter uses `>=` (not `>`) to avoid losing trades at the nanosecond boundary.
+
+### Periodic Flush Architecture
+
+- Dedicated `_periodic_flush()` asyncio task runs on true 5-min wall clock (not gated on trade count)
+- Task stored as `self._flush_task` — guarded with `done()` check on start, cancelled on `stop()`
+- Takes `list(self._ring_buffer)` snapshot in the event loop, then dispatches `flush()` to `asyncio.to_thread()`
+- GCS + Supabase I/O never blocks the event loop
+
+### What Agents Can Query
+
+From `options_flow_daily`:
+- "Which tickers had the heaviest call flow today?" → `ORDER BY call_premium DESC`
+- "Show me bearish sweep activity this week" → `WHERE sweep_count > 0 AND sentiment_score < -20`
+- "What's the P/C ratio trend for NVDA?" → multi-day query on `pc_ratio`
+
+From `options_flow_anomalies`:
+- "Any premium spikes today?" → `WHERE anomaly_type = 'premium_spike' AND trade_date = today`
+- "Sweep clusters on AI stocks" → join with theme tickers
+
+From GCS parquet (via `FlowPersistence.load_historical()`):
+- Full trade-level detail for deeper analysis
+- Every individual trade >= $10K with classification, Greeks (when available)
+
+### Known Limitations
+
+1. **`_last_flush_ts` not persisted**: Resets to 0 on process restart. First flush after restart re-processes all ring buffer trades. GCS dedup prevents duplicate parquet rows, but Supabase summaries may double-count if the same trades are upserted twice.
+2. **Anomaly dedup**: No unique constraint on `options_flow_anomalies`. Process restart during flush interval could re-detect and re-persist the same anomaly.
+3. **IV/delta/OI not in WebSocket**: These fields are always `None`/`0` in flow trades. Only available from REST chain snapshot endpoints.
+
+---
+
+## 17. AGENT OPTIONS INTELLIGENCE PIPELINE (April 10, 2026)
+
+### Overview
+
+Wires options data (Supabase + GCS) into the LangGraph AI agent system via 6 tool functions. Before this, agents were completely blind to options activity. Now SentinelAnalyst, GuardianPortfolio, SentinelScout, and SentinelMacro can query institutional flow, anomalies, GEX profiles, thematic heat, IV/ETS signals, and chain summaries.
+
+### Key Files
+
+| File | Role |
+|------|------|
+| `backend/logic/tools/options_tools.py` | 6 tool functions + OpenAI schemas |
+| `backend/logic/agents/sentinel_analyst.py` | Registers all 6 OPTIONS_TOOLS |
+| `backend/logic/agents/guardian.py` | Flow + anomalies + proactive `check_portfolio_flow_risk` |
+| `backend/logic/agents/sentinel_scout.py` | Thematic heat + anomalies |
+| `backend/logic/agents/sentinel_macro.py` | Flow + thematic heat for macro context |
+| `backend/logic/tools/intelligence_tools.py` | New `options` domain (6th in INTELLIGENCE_TOOLS) |
+| `backend/logic/engines/health_engine.py` | Handles option positions, pre-builds markdown table |
+| `directives/guardian_portfolio_directive.md` | Proactive behavior + table format instructions |
+
+### The 6 Agent Tools
+
+| Tool | Data Source | Purpose |
+|------|-------------|---------|
+| `fetch_options_flow` | Supabase `options_flow_daily` | Per-ticker or market-wide institutional flow (premium, sentiment, sweeps, blocks) |
+| `fetch_flow_anomalies` | Supabase `options_flow_anomalies` | Premium spikes, sweep clusters, volume surges |
+| `fetch_options_gex` | GCS `gex/{TICKER}.json` | Gamma exposure profile with key levels (max gamma, put wall, call wall) |
+| `fetch_thematic_heat` | GCS `_thematic_heat.json` | Options activity aggregated by 24 investment themes |
+| `fetch_iv_ets_signals` | GCS `_iv_ets.json` | IV vs ETS divergence signals (breakout_watch, fear_fade, etc.) |
+| `fetch_options_chain_summary` | GCS `chains/{TICKER}.json` | ATM IV, total OI/volume, notable strikes |
+
+All tools use:
+- `asyncio.to_thread` dispatch (non-blocking)
+- Ticker validation (regex `^[A-Z]{1,5}(\.[A-Z])?$`)
+- Date validation (YYYY-MM-DD format)
+- Sanitized errors (log server-side, return generic message to LLM)
+- Previous trading day fallback for GCS data
+- Days cap (30 for flow, 14 for anomalies)
+- Limit cap (100 for flow, 200 for anomalies)
+
+### Agent Tool Assignment
+
+| Agent | Tools Available |
+|-------|----------------|
+| **SentinelAnalyst** | All 6 (flow, anomalies, GEX, thematic heat, IV/ETS, chain summary) |
+| **GuardianPortfolio** | Flow, anomalies, `check_portfolio_flow_risk` (proactive) |
+| **SentinelScout** | Thematic heat, anomalies, + `options` intelligence domain |
+| **SentinelMacro** | Flow, thematic heat, + `options` intelligence domain |
+| **SentinelScanner** | Via Analyst delegation only |
+
+### Options Intelligence Domain
+
+`fetch_intelligence_snapshot(domain="options")` synthesizes a daily options summary on-the-fly from Supabase:
+
+```
+{
+  "domain": "options",
+  "date": "2026-04-10",
+  "source": "supabase",
+  "note": "Returns most recent trading day (top-20 sample)",
+  "data": {
+    "market_sentiment": { "score": 23.4, "label": "bullish",
+                          "total_call_premium": ..., "total_put_premium": ... },
+    "top_flow_tickers": [...],     # Top 5 by premium
+    "sweep_leaders": [...],        # Top 5 by sweep count (same query, no extra call)
+    "high_anomalies": 3,
+    "anomaly_summary": [...]       # Top 5 high-severity events
+  }
+}
+```
+
+**Important constraints**:
+- Single Supabase query for flow (derives sweep leaders from same 20-row result)
+- Separate query for anomalies (different table)
+- Returns error (not zero-filled "neutral") if BOTH queries fail
+- `date` parameter accepted for interface consistency but always returns most recent trading day
+- `options` domain NOT supported for `fetch_intelligence_range` — use `fetch_options_flow` with `days=N` instead
+
+### Guardian Proactive Flow Risk
+
+`check_portfolio_flow_risk` is a proactive tool that Guardian calls automatically on "how is my portfolio?" queries:
+
+```
+Step 1: Get holdings via PortfolioTools.fetch_holdings()
+Step 2: Extract underlying tickers from stock symbols + OCC option contracts
+  - Uses _extract_underlying() regex: ^[A-Z]{1,5}(?:\.[A-Z])?
+  - "AAPL 260417C00252500" → "AAPL"
+  - Deduplicates: 4 QCOM options + 0 QCOM stock = 1 QCOM query
+Step 3: Aggregate by underlying with combined P&L and option_contracts count
+Step 4: Query anomalies (market-wide, filter locally to held tickers)
+Step 5: Query flow sentiment per underlying in PARALLEL via asyncio.gather
+  - Cap: 20 tickers (_MAX_FLOW_TICKERS)
+  - Sorted by position size (largest P&L first) so cap covers highest-risk holdings
+Step 6: Flag signals:
+  - Bearish flow: sentiment_score < -20
+  - Sweep clusters: sweep_count >= 3
+  - Heavy puts: pc_ratio > 2.0
+  - Anomaly events (premium_spike, sweep_cluster, volume_surge)
+```
+
+**Returns**:
+- `total_underlyings`, `stock_positions`, `option_contracts`
+- `holdings_summary` — per-underlying with stock/option counts, combined P&L
+- `risk_flags` — per-ticker with list of triggered signals
+- `risk_flags_by_ticker` — dict keyed by underlying for easy inline joining
+- `data_warnings` — failed fetches, skipped holdings, anomaly truncation
+
+### Health Engine Option Handling
+
+`PortfolioHealthEngine.calculate_health()` was updated to handle option positions:
+
+1. **Underlying extraction**: Option symbols (OCC format) resolved via `_extract_underlying()` regex. Cache lookups (sector, FT_Score, SMA50) use the underlying, not the raw OCC symbol.
+
+2. **Options inherit metrics from underlying**: An `AAPL 260417C00252500` position gets `sector="Technology"`, `ft_score=<AAPL's>`, etc. Before this fix, options always landed in "Other" sector with `ft_score=0`, inflating the concentration warning.
+
+3. **All holdings returned, not just movers**: The previous response only included top 10 by daily change %. Options with `change_pct=0` never made the cut. Now returns complete `all_holdings` list sorted by value.
+
+4. **Pre-built markdown table**: `holdings_markdown_table` field contains a ready-to-paste markdown table. The Guardian directive instructs the LLM to paste it VERBATIM rather than reconstructing from `all_holdings` — prevents the LLM from silently dropping option rows with sparse P&L data.
+
+5. **Fast path**: `include_analytics` defaults to False. Previously always ran `AnalyticsEngine.compute()` which fetches 5y OHLCV + replays every trade day-by-day (30s-2min). Now only runs on explicit request.
+
+### Table Format (pre-built server-side)
+
+```
+| Ticker | Type | Weight | P&L % | P&L $ | Sector |
+|--------|------|--------|-------|-------|--------|
+| QQQ | STK | 43.65% | +5.78% | +$1,203 | Global Indices |
+| QCOM 260417C00252500 | OPT | 1.18% | -98.66% | -$1,450 | Technology |
+```
+
+### Performance Optimizations
+
+| Before | After | Savings |
+|--------|-------|---------|
+| `AnalyticsEngine.compute()` on every health call (5y OHLCV + trade replay) | Skipped by default, opt-in via `include_analytics=True` | 30s-2min |
+| Sequential per-ticker flow queries in Guardian | `asyncio.gather` — 20 parallel via asyncio.to_thread | ~1s → ~80ms |
+| Redundant 3rd Supabase query for sweep leaders in options intelligence | Derived from same top-20 result | One fewer round-trip |
+| Always hitting Polygon for GCS-backed endpoints | Previous trading day fallback + 3-day staleness guard | 8-60s per miss |
+
+### What the Agents Can Answer Now
+
+**SentinelAnalyst:**
+- "What's the options flow on NVDA today?"
+- "Where's the SPY gamma wall?"
+- "Find cheap options on momentum stocks"
+- "Any unusual activity on AAPL this week?"
+
+**GuardianPortfolio (proactive):**
+- "How is my portfolio?" → calls `fetch_portfolio_health` AND `check_portfolio_flow_risk` together
+- "Any risk on my holdings?" → scans all held underlyings for flow anomalies
+- "What's the flow on my holdings?" → per-ticker flow for each held underlying
+
+**SentinelScout:**
+- "Which themes have institutional options heat?"
+- "Is AI seeing heavy call flow?"
+
+**SentinelMacro:**
+- "Is options flow risk-on or risk-off?"
+- "What does sector flow say about macro positioning?"
+
+**Via intelligence domain (Analyst, Scout, Macro):**
+- `fetch_intelligence_snapshot(domain="options")` — single-shot daily options briefing
+
+### Known Limitations
+
+1. **GCS-backed tools (GEX, thematic heat, IV/ETS, chain summary) return empty until Cloud Run Jobs are deployed.** Without the tiered snapshot runner writing to GCS, these endpoints fall back to expensive on-demand Polygon scans (8-60s).
+
+2. **Options pricing needs live market data**: Outside market hours, option positions show `pnl_percent=0` and `change_pct=0` because `live_prices` table has no fresh option marks. Health report displays them but P&L columns are flat.
+
+3. **LLM row-dropping mitigated but not eliminated**: The pre-built markdown table prevents the LLM from silently filtering options, but some models still ignore "paste verbatim" instructions. If it happens again, the next mitigation is to inject the table directly into the final response outside the LLM's control.
+
+4. **20-ticker cap on Guardian flow scan**: Portfolios with more than 20 holdings have smaller positions skipped. Sorted by absolute P&L so largest exposure is always scanned first. `data_warnings` surfaces the skipped count.
+
+5. **`_last_flush_ts` restart caveat**: Backend restart mid-market-hours can cause first flush to double-count Supabase summaries for trades currently in the ring buffer. GCS parquet dedup is unaffected.
+
+6. **Options intelligence is top-20 biased**: `market_sentiment` in the `options` intelligence domain is computed from only the top 20 tickers by premium, not a full market aggregation. Documented in the `note` field.
+
+### Market-Open Checklist
+
+When markets open and flow data starts populating:
+
+| Check | How |
+|-------|-----|
+| WebSocket receiving trades | `SELECT COUNT(*) FROM options_flow_daily WHERE trade_date = CURRENT_DATE` should grow |
+| Anomalies firing | `SELECT COUNT(*) FROM options_flow_anomalies WHERE trade_date = CURRENT_DATE` — may be zero for first 15-30 min |
+| Agent can query flow | Ask: "Options flow on SPY today" — should return populated data |
+| Portfolio P&L populated | Ask Guardian: "How is my portfolio?" — option positions should show real daily change |
+| GCS-backed tools work | Ask: "Where's the SPY gamma wall?" — requires Cloud Run Jobs deployed |
+
+**Dependencies**:
+- `POLYGON_API_KEY` env var set
+- Backend running during market hours (WebSocket auto-starts 15s after boot via `schedule_options_flow_ws` in `backend/api/main.py:452`)
+- Supabase migration 39 applied (tables + `upsert_flow_daily` RPC)
+- Cloud Run Jobs deployed per `deploy_options_tiers.sh` (for GCS pre-compute pipeline)
+
+### Incident Reference
+
+See `docs/agent-options-intelligence-pipeline.md` for the original plan and `docs/agent-options-test-cases.md` for test cases.
