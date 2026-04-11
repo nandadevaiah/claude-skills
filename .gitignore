@@ -4,6 +4,7 @@
 *.key
 
 # Machine-specific state
+.claude/settings.local.json
 history.jsonl
 debug/
 cache/
