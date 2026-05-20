@@ -19,7 +19,7 @@ cd claude-skills
 | Skills | 81 | Deep reference material (coding-standards, flowlyte, incident-report, rust-testing, etc.) |
 | Rules | 14 sets | Common + 13 language-specific rule sets (TypeScript, Python, Go, Rust, etc.) |
 | Hooks | Full | Pre/PostToolUse, SessionStart/End, Stop, PreCompact lifecycle hooks |
-| MCP Servers | 28 | GitHub, Supabase, Vercel, Railway, Cloudflare, Playwright, Context7, Google Cloud (gcloud/observability/storage/backupdr), etc. |
+| MCP Servers | 29 | GitHub, Supabase, Stripe, Vercel, Railway, Cloudflare, Playwright, Context7, Google Cloud (gcloud/observability/storage/backupdr), etc. |
 | IDE Configs | 3 | Cursor, Codex, OpenCode cross-IDE support |
 
 ## Install Script Features
@@ -43,6 +43,8 @@ After running `install.sh`, edit these files and replace `YOUR_*_HERE` placehold
    gcloud auth application-default login
    gcloud config set project YOUR_PROJECT_ID
    ```
+4. `supabase` — hosted HTTP server ([supabase-community/supabase-mcp](https://github.com/supabase-community/supabase-mcp)) with OAuth. Replace `YOUR_PROJECT_REF` in the URL with your project ID (or remove the `project_ref` param for account-wide access), then run `/mcp` in Claude Code to complete login.
+5. `stripe` — hosted HTTP server with OAuth ([docs.stripe.com/mcp](https://docs.stripe.com/mcp)). Run `/mcp` in Claude Code to authenticate, or add a Bearer header with a [restricted API key](https://docs.stripe.com/keys#create-restricted-api-key).
 
 ## Updating
 

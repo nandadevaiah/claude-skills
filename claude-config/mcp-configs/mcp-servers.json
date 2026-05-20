@@ -17,9 +17,9 @@
       "description": "Web scraping and crawling"
     },
     "supabase": {
-      "command": "npx",
-      "args": ["-y", "@supabase/mcp-server-supabase@latest", "--project-ref=YOUR_PROJECT_REF"],
-      "description": "Supabase database operations"
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp?read_only=true&project_ref=YOUR_PROJECT_REF",
+      "description": "Supabase (supabase-community/supabase-mcp) — hosted HTTP server with OAuth. Tools for tables, SQL, edge functions, storage, branching, docs. Replace YOUR_PROJECT_REF with your project ID, or remove the param for account-wide access. Drop read_only=true to allow writes."
     },
     "memory": {
       "command": "npx",
@@ -162,6 +162,11 @@
       "command": "npx",
       "args": ["-y", "@google-cloud/backupdr-mcp"],
       "description": "Google Cloud Backup and DR — manage backup vaults, plans, associations, datasources; restore Compute/Cloud SQL; discover protectable resources. Uses ADC from gcloud auth."
+    },
+    "stripe": {
+      "type": "http",
+      "url": "https://mcp.stripe.com",
+      "description": "Stripe MCP — payments, customers, subscriptions, invoices, products, refunds, balance, etc. Hosted HTTP server with OAuth (preferred) or Bearer auth via a restricted API key. After adding, run `/mcp` in Claude Code to authenticate. Docs: https://docs.stripe.com/mcp"
     }
   },
   "_comments": {
