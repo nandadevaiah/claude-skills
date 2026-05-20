@@ -142,6 +142,26 @@
         "CONFLUENCE_API_TOKEN": "YOUR_CONFLUENCE_TOKEN_HERE"
       },
       "description": "Confluence Cloud integration — search pages, retrieve content, explore spaces"
+    },
+    "gcloud": {
+      "command": "npx",
+      "args": ["-y", "@google-cloud/gcloud-mcp"],
+      "description": "Google Cloud via gcloud CLI — run_gcloud_command for Cloud Run, IAM, Secret Manager, etc. Requires gcloud CLI installed and `gcloud auth login`. Repo: https://github.com/googleapis/gcloud-mcp"
+    },
+    "gcloud-observability": {
+      "command": "npx",
+      "args": ["-y", "@google-cloud/observability-mcp"],
+      "description": "Google Cloud Observability — query Cloud Logging, Monitoring metrics/time series, alert policies, Cloud Trace, and Error Reporting groups. Uses ADC from gcloud auth."
+    },
+    "gcloud-storage": {
+      "command": "npx",
+      "args": ["-y", "@google-cloud/storage-mcp"],
+      "description": "Google Cloud Storage — list/read/write/copy/move/delete objects, manage buckets, IAM policies, and Storage Insights BigQuery queries. Uses ADC from gcloud auth."
+    },
+    "gcloud-backupdr": {
+      "command": "npx",
+      "args": ["-y", "@google-cloud/backupdr-mcp"],
+      "description": "Google Cloud Backup and DR — manage backup vaults, plans, associations, datasources; restore Compute/Cloud SQL; discover protectable resources. Uses ADC from gcloud auth."
     }
   },
   "_comments": {

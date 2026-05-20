@@ -19,7 +19,7 @@ cd claude-skills
 | Skills | 81 | Deep reference material (coding-standards, flowlyte, incident-report, rust-testing, etc.) |
 | Rules | 14 sets | Common + 13 language-specific rule sets (TypeScript, Python, Go, Rust, etc.) |
 | Hooks | Full | Pre/PostToolUse, SessionStart/End, Stop, PreCompact lifecycle hooks |
-| MCP Servers | 24 | GitHub, Supabase, Vercel, Railway, Cloudflare, Playwright, Context7, etc. |
+| MCP Servers | 28 | GitHub, Supabase, Vercel, Railway, Cloudflare, Playwright, Context7, Google Cloud (gcloud/observability/storage/backupdr), etc. |
 | IDE Configs | 3 | Cursor, Codex, OpenCode cross-IDE support |
 
 ## Install Script Features
@@ -37,6 +37,12 @@ After running `install.sh`, edit these files and replace `YOUR_*_HERE` placehold
 
 1. `~/.claude/mcp-configs/mcp-servers.json` — GitHub PAT, Firecrawl, Exa, fal.ai, Browserbase, Confluence
 2. `~/.claude/claude_code_config.json` — Notion API token
+3. Google Cloud MCP servers (`gcloud`, `gcloud-observability`, `gcloud-storage`, `gcloud-backupdr`) — no API keys, but require the [gcloud CLI](https://cloud.google.com/sdk/docs/install) installed and authenticated:
+   ```bash
+   gcloud auth login
+   gcloud auth application-default login
+   gcloud config set project YOUR_PROJECT_ID
+   ```
 
 ## Updating
 
