@@ -1,3 +1,9 @@
+---
+name: incident-report
+description: Generate a structured technical incident report from the current session's work and save it to technical_documentation/. Use after fixing a bug, data issue, or production incident, or when asked to write a post-mortem documenting what broke, the root cause, and the fix.
+origin: ECC
+---
+
 # Incident Report Generator
 
 Generate a structured technical incident report from the current session's work and save it to `technical_documentation/`.

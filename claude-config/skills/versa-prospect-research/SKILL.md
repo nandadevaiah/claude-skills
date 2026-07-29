@@ -54,14 +54,13 @@ Search for:
 
 Research and compile:
 - How Versa SASE maps specifically to this company's industry and infrastructure
-- Latest Versa analyst recognition: Gartner MQs (SASE, SSE, SD-WAN), GigaOm, Forrester
 - Recent Versa product launches relevant to this account's challenges
 - Competitive comparison tailored to the account: Versa vs. Zscaler, Palo Alto Prisma, Fortinet
 - Specific use cases for their environment (OT/IT convergence, sovereign SASE, ZTNA, SD-WAN, etc.)
 
 ## Output
 
-Create folder `/home/ndev/projects/Versa/[FOLDERNAME]/` and write a single `research.html` file.
+Create folder `~/projects/Versa/[FOLDERNAME]/` and write a single `research.html` file.
 
 ### Required Sections (in order)
 
@@ -77,9 +76,8 @@ Create folder `/home/ndev/projects/Versa/[FOLDERNAME]/` and write a single `rese
    - Each question has a **Rationale** in italic explaining why to ask it
 6. **How [COMPANY] Can Leverage Versa SASE** — 6-7 use cases written for their specific environment
 7. **Competitive Positioning** — comparison table (Versa vs Zscaler, Palo Alto, Fortinet) with colour-coded tags, plus a per-competitor weakness card
-8. **Versa Analyst Recognition** — table of current Gartner, GigaOm, and Forrester standings
-9. **Meeting Strategy** — opening hooks (3 options), key messages for this contact's persona, objection handling (3 common objections with responses), suggested next steps
-10. **Appendix** — industry competitors table
+8. **Meeting Strategy** — opening hooks (3 options), key messages for this contact's persona, objection handling (3 common objections with responses), suggested next steps
+9. **Appendix** — industry competitors table
 
 ### HTML Style Requirements
 
@@ -105,7 +103,6 @@ Create folder `/home/ndev/projects/Versa/[FOLDERNAME]/` and write a single `rese
 3. **Contact persona awareness**: tailor meeting strategy tone to the contact's seniority and technical level (engineer vs. CISO vs. CIO vs. business exec)
 4. **Consistency**: every output must follow the exact section order and HTML structure above
 5. **Single file**: output is always one `research.html` — no separate CSS files, no assets folder
-6. **Versa accuracy**: always verify Versa's latest analyst recognitions before writing — do not use outdated Gartner years
 
 ## HTML Template
 
@@ -132,9 +129,8 @@ The output HTML file MUST use the following exact CSS and structural template. D
   <!-- Section 4: Discovery Questions (4 themes x 3 questions, each in question-card with .question and .rationale) -->
   <!-- Section 5: Versa Use Cases (grid-2 of callout-green boxes, 6-7 use cases) -->
   <!-- Section 6: Competitive Positioning (comparison table with .tag spans, then grid-3 of .comp-card weakness cards) -->
-  <!-- Section 7: Analyst Recognition (table with .tag-green for Leader positions) -->
-  <!-- Section 8: Meeting Strategy (hook-cards for openers, callout-blue for persona messages, question-cards for objections, ordered list for next steps) -->
-  <!-- Section 9: Appendix — Industry Competitors table -->
+  <!-- Section 7: Meeting Strategy (hook-cards for openers, callout-blue for persona messages, question-cards for objections, ordered list for next steps) -->
+  <!-- Section 8: Appendix — Industry Competitors table -->
   <!-- Footer: centered, muted text with "Prepared for Versa Networks" -->
 </div>
 </body>
@@ -149,7 +145,7 @@ The output HTML file MUST use the following exact CSS and structural template. D
 - Callout severity: `callout-red` (security incidents, existential risks), `callout-orange` (financial pressure, deadlines, compliance gaps), `callout-green` (opportunities, strengths), `callout-blue` (context, background)
 - Competitive tags: `tag-green` = Versa advantage, `tag-red` = competitor weakness, `tag-orange` = partial/neutral
 - Footer: `"Prepared for Versa Networks • [DATE] • Confidential — For internal sales use only"`
-- For existing Versa project folders, look at other `research.html` or `*.html` files in `/home/ndev/projects/Versa/` as references for the exact format
+- For existing Versa project folders, look at other `research.html` or `*.html` files in `~/projects/Versa/` as references for the exact format
 
 ## Example Trigger Phrases
 
