@@ -33,3 +33,6 @@ projects/
 .DS_Store
 Thumbs.db
 .hariari-worktrees/
+
+# Test scratch dir
+tests/.testrun/

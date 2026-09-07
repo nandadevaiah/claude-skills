@@ -26,10 +26,53 @@ cd claude-skills
 
 - Works on Linux, macOS, Windows (Git Bash / WSL)
 - Backs up existing `~/.claude` config before overwriting
+- Merges `~/.claude/CLAUDE.md` instead of overwriting it (see below)
 - Installs external skills (gstack) from their repos
 - Installs Claude Code plugins (claude-mem, frontend-design, understand-anything, rust-analyzer-lsp)
 - Sets executable permissions on scripts
 - Prompts for API key configuration
+
+## CLAUDE.md: Managed Block
+
+`~/.claude/CLAUDE.md` holds your global instructions, and it is the one file the
+installer does not replace wholesale. It ships shared rules inside a pair of
+marker lines:
+
+```markdown
+<!-- BEGIN managed: claude-skills -->
+...shared rules from this repo...
+<!-- END managed: claude-skills -->
+```
+
+On install, `lib/install-claude-md.sh` replaces only what is between those
+markers. Anything above or below them is yours and is never touched — put
+machine-specific preferences there. If the file does not exist yet it is copied
+in whole (nothing to back up in that case); if it exists without markers the
+block is appended to the end. Whenever an existing file is about to change, the
+previous version is copied to the backup directory first.
+
+A few things it deliberately handles rather than plough through:
+
+- **Symlinked `CLAUDE.md`** (pointing into a dotfiles repo) — the link chain is
+  resolved and the real file is rewritten, so the link survives.
+- **CRLF files** (Git Bash / Windows) — markers still match, and the block is
+  written back with the line endings the file already uses.
+- **Damaged markers** — more than one of either marker, END before BEGIN, or
+  BEGIN with no END. The installer refuses to guess: it leaves your file alone
+  and writes the new version to `~/.claude/CLAUDE.md.new` for you to merge by
+  hand. If a `.new` file is already there and differs from the repo version, it
+  is left alone too, on the assumption you are mid-merge.
+
+  An unindented marker line inside a fenced code block counts toward those
+  totals like any other line, so a fence documenting this feature will trip the
+  refusal *if the file also has a real block*. A fenced pair that is the only
+  pair in the file is indistinguishable from a real one and gets treated as the
+  managed block — indent marker lines by four spaces if you want to quote them
+  safely.
+- **A broken symlink** at `~/.claude/CLAUDE.md` — nothing is written; fix or
+  remove the link and re-run.
+
+Tests for all of this live in `tests/test-install-claude-md.sh`.
 
 ## Post-Install: API Keys
 
@@ -70,6 +113,10 @@ Restores from the most recent backup created by the installer.
 claude-skills/
 ├── install.sh              # Cross-platform installer
 ├── uninstall.sh            # Restore from backup
+├── lib/
+│   └── install-claude-md.sh  # Managed-block merge for CLAUDE.md
+├── tests/
+│   └── test-install-claude-md.sh  # Suite for the merge logic
 ├── claude-config/          # All configuration files
 │   ├── agents/             # 29 agent definitions
 │   ├── commands/           # 63 slash commands
@@ -82,6 +129,7 @@ claude-skills/
 │   ├── hooks/              # Hook configuration
 │   ├── mcp-configs/        # MCP server definitions
 │   ├── ecc/                # ECC install state
+│   ├── CLAUDE.md           # Global instructions (managed block only)
 │   ├── settings.json       # Global settings
 │   └── ...
 └── README.md

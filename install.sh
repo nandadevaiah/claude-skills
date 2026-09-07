@@ -58,7 +58,7 @@ if [[ -d "$TARGET_DIR" ]]; then
             cp -r "$TARGET_DIR/$dir" "$BACKUP_DIR/$dir"
         fi
     done
-    for file in settings.json claude_code_config.json plugin.json AGENTS.md README.md; do
+    for file in settings.json claude_code_config.json plugin.json AGENTS.md README.md CLAUDE.md; do
         if [[ -f "$TARGET_DIR/$file" ]]; then
             cp "$TARGET_DIR/$file" "$BACKUP_DIR/$file"
         fi
@@ -130,6 +130,22 @@ for file in settings.json claude_code_config.json plugin.json AGENTS.md README.m
         ok "Installed $file"
     fi
 done
+
+# Merge CLAUDE.md instead of overwriting it: only the marker-delimited
+# "managed: claude-skills" block is replaced, so anything the user has added
+# outside that block on this machine survives the install.
+CLAUDE_MD_MERGER="$SCRIPT_DIR/lib/install-claude-md.sh"
+if [[ ! -f "$SOURCE_DIR/CLAUDE.md" ]]; then
+    warn "No $SOURCE_DIR/CLAUDE.md in the repo. Skipped the CLAUDE.md merge."
+elif [[ ! -f "$CLAUDE_MD_MERGER" ]]; then
+    warn "Merge helper not found: $CLAUDE_MD_MERGER"
+    warn "Skipped CLAUDE.md. Copy the managed block over by hand if you need it."
+else
+    info "Merging CLAUDE.md managed block..."
+    if ! bash "$CLAUDE_MD_MERGER" "$SOURCE_DIR/CLAUDE.md" "$TARGET_DIR/CLAUDE.md" "$BACKUP_DIR"; then
+        error "CLAUDE.md merge failed — see the error above. Install continuing."
+    fi
+fi
 
 # Copy IDE-specific configs (.agents, .codex, .cursor, .opencode)
 for dotdir in .agents .codex .cursor .opencode; do
