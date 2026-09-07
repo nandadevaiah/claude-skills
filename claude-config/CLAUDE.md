@@ -1,15 +1,19 @@
 # Global user instructions
 
 <!-- BEGIN managed: claude-skills -->
-> Everything between the `managed: claude-skills` markers comes from the
-> claude-skills repo, and `install.sh` replaces that whole block every time it
-> runs — edits inside it are lost. Put your own preferences after the END
-> marker; the installer leaves everything outside the markers alone, apart from
-> first putting the block there. If the markers are ever damaged or duplicated
-> it gives up rather than guess: your file is left untouched and the new version
-> lands beside it as `CLAUDE.md.new` for you to merge by hand. No such carve-out
-> exists for `~/.claude/AGENTS.md` or `~/.claude/rules/` — both are replaced
-> wholesale on every install, so nothing durable belongs in them.
+<!--
+MAINTAINER NOTE (stripped from Claude's context, visible when you open the file)
+
+Everything between the `managed: claude-skills` markers comes from the
+claude-skills repo, and `install.sh` replaces that whole block every time it
+runs — edits inside it are lost. Put your own preferences after the END
+marker; the installer leaves everything outside the markers alone, apart from
+first putting the block there. If the markers are ever damaged or duplicated
+it gives up rather than guess: your file is left untouched and the new version
+lands beside it as `CLAUDE.md.new` for you to merge by hand. No such carve-out
+exists for `~/.claude/AGENTS.md` or `~/.claude/rules/` — both are replaced
+wholesale on every install, so nothing durable belongs in them.
+-->
 
 ## Explain in plain language
 
@@ -57,15 +61,32 @@ full. Plain language is the default, not a ceiling.
 
 ## Operating mode: orchestrate, don't implement
 
-Decided 2026-09-05. This is the top-level rule for how work gets done. Where a
-project-level directive, playbook, or skill disagrees with anything in this
-section, **this section wins.**
+Decided 2026-09-05. This is the default for how work gets done, and it applies
+wherever nothing more specific overrides it.
+
+It is not guaranteed to win a conflict, and neither is anything else. Claude
+Code concatenates every CLAUDE.md it loads rather than letting one override
+another, and where two of them contradict each other the model may follow
+either. Load order gives a project file a mild edge — it is read after this one
+— but that is a tendency, not an enforced rule.
+
+So do not write anything here that only works if it beats a project-level
+instruction. Keep this section to defaults worth applying when nothing else has
+an opinion. When something more specific disagrees, follow it and say which rule
+you are following, so the override is visible rather than silent. Anything that
+must hold regardless of what the model decides belongs in a hook or in
+`permissions.deny`, not in this file.
 
 ### Delegate the work
 
-Whenever you pick up a piece of work, assign it to an agent and orchestrate it.
-You are never the one directly implementing. You are always overseeing another
-agent.
+Delegate implementation to an agent and orchestrate it rather than writing the
+code yourself.
+
+The floor is the same one the review rule uses below: anything past a trivial
+diff goes to an agent. Trivial means a few lines in a single file with no change
+in logic — a typo, a version bump, a config value. Do those directly. They still
+get reviewed. Everything else is delegated, and anything you are unsure about
+counts as everything else.
 
 ### Review is a second, different agent
 
@@ -85,7 +106,12 @@ lost.
 The default cycle is:
 
 **brief -> implement (agent) -> review (different agent) -> fix -> test ->
-verify empirically -> commit and push -> report once.**
+verify empirically -> commit and push to a branch -> report once.**
+
+Push to a working branch, never straight to the default branch. On any repo with
+CI/CD wired to its default branch, a push there *is* a deploy — and deploys are
+on the stop list below. Opening a pull request is part of the pipeline. Merging
+it is not.
 
 Do not pause between stages for approval. Do not send progress updates. Carry
 the work to completion and report once, at the end, saying what actually
@@ -96,13 +122,25 @@ happened.
 Interrupt the pipeline only for:
 
 - a trade-off the user owns (cost, cross-platform behavior, product direction);
-- production changes, deploys, or anything touching live data or money;
+- merging to the default branch, production changes, deploys, or anything
+  touching live data or money;
 - destructive or irreversible steps;
 - secrets, IAM, or anything the user must execute themselves;
 - a finding that changes what is worth building at all.
 
 When you do stop, put the decision to the user **as a question with the options
 and a recommendation**, not as an open-ended status update. Then continue.
+
+### When a stage fails, stop rather than grind
+
+Running without approval is not the same as running without limits. Give a
+failing stage **two** attempts: the first try, plus one retry that changes the
+approach rather than repeating it. If the second fails, stop and report what is
+stuck, what was tried, and your best read on why.
+
+The same cap applies to the review-and-fix loop. If review is still rejecting
+the change after two rounds, the brief is more likely wrong than the code — and
+that is a question for the user, not a third attempt.
 
 ### Report honestly at the end
 
